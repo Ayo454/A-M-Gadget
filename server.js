@@ -1218,9 +1218,20 @@ function createServer(options = {}) {
   }
 
   async function staticFile(request, response, url) {
+    if (url.pathname === "/admin.html") {
+      response.writeHead(308, {
+        Location: `/admin${url.search}`,
+        "Cache-Control": "no-store"
+      }).end();
+      return;
+    }
+
     let requestedPath;
     try {
-      requestedPath = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
+      const pathname = url.pathname === "/" ? "/index.html"
+        : url.pathname === "/admin" ? "/admin.html"
+        : url.pathname;
+      requestedPath = decodeURIComponent(pathname);
     } catch {
       response.writeHead(400).end("Invalid URL path.");
       return;

@@ -81,8 +81,11 @@ test("serves the store and keeps the data files private", async t => {
 
   const accountPage = await fetch(`${baseUrl}/account.html`);
   assert.equal(accountPage.status, 200);
-  const adminPage = await fetch(`${baseUrl}/admin.html`);
+  const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
+  const oldAdminPage = await fetch(`${baseUrl}/admin.html`, { redirect: "manual" });
+  assert.equal(oldAdminPage.status, 308);
+  assert.equal(oldAdminPage.headers.get("location"), "/admin");
   const allProductsPage = await fetch(`${baseUrl}/view%20all.html`);
   assert.equal(allProductsPage.status, 200);
   const productDetailPage = await fetch(`${baseUrl}/product.html`);
