@@ -303,6 +303,21 @@ test("registers customers and stores only salted password hashes", async t => {
   assert.equal((await login.json()).user.email, "customer@example.com");
 });
 
+test("marks session cookies Secure in production", async t => {
+  const app = await createTestApp(t, { secureCookies: true });
+  const baseUrl = await app.listen();
+  const registration = await jsonRequest(`${baseUrl}/api/auth/register`, "POST", {
+    name: "Secure Cookie Customer",
+    email: "secure@example.com",
+    password: "customer-password",
+    phone: "+1 555 123 4567",
+    address: "123 Example Street, Test City"
+  });
+
+  assert.equal(registration.status, 201);
+  assert.match(registration.headers.get("set-cookie"), /; Secure/);
+});
+
 test("stores customer data, sessions, and avatars in Supabase when configured", async t => {
   const collections = new Map();
   const avatars = new Map();

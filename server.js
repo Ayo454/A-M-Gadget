@@ -195,6 +195,7 @@ function createServer(options = {}) {
     : null);
   const adminEmail = String(options.adminEmail ?? process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
   const adminPassword = String(options.adminPassword ?? process.env.ADMIN_PASSWORD ?? "");
+  const secureCookies = options.secureCookies ?? (process.env.NODE_ENV === "production");
   const brevoApiKey = String(options.brevoApiKey ?? process.env.BREVO_API_KEY ?? "").trim();
   const brevoSenderEmail = String(options.brevoSenderEmail ?? process.env.BREVO_SENDER_EMAIL ?? "").trim();
   const brevoSenderName = String(options.brevoSenderName ?? process.env.BREVO_SENDER_NAME ?? "A&M Gadget").trim();
@@ -760,7 +761,7 @@ function createServer(options = {}) {
   }
 
   function sessionCookie(token, request) {
-    const secure = request.socket.encrypted ? "; Secure" : "";
+    const secure = request.socket.encrypted || secureCookies ? "; Secure" : "";
     return `sid=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${sessionCookieLifetime}${secure}`;
   }
 
@@ -1281,7 +1282,7 @@ function createServer(options = {}) {
 if (require.main === module) {
   loadEnvironmentFile().then(() => {
     const port = Number(process.env.PORT) || 3000;
-    const host = process.env.HOST || "127.0.0.1";
+    const host = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
     const server = createServer();
     server.on("error", error => {
       if (error.code === "EADDRINUSE") {
