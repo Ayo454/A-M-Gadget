@@ -48,6 +48,8 @@
           <button type="button" data-admin-view="products"><span>▣</span> Products</button>
           <button type="button" data-admin-view="users"><span>♙</span> Users <small class="admin-nav-count" id="adminUserCount">0</small></button>
           <button type="button" data-admin-view="orders"><span>▤</span> Orders <small class="admin-nav-count" id="adminOrderCount">0</small></button>
+          <button type="button" data-admin-view="riders"><span>♧</span> Riders <small class="admin-nav-count" id="adminRiderCount">0</small></button>
+          <button type="button" data-admin-view="payouts"><span>₦</span> Payouts <small class="admin-nav-count" id="adminPayoutCount">0</small></button>
           <a href="index.html"><span>↗</span> View storefront</a>
         </nav>
         <div class="admin-sidebar-bottom">
@@ -147,6 +149,48 @@
               <p class="admin-order-detail-message" id="adminOrderDetailMessage" role="status" aria-live="polite" hidden></p>
             </aside>
           </div>
+        </section>
+
+        <section class="admin-view" id="adminRidersView" data-admin-panel="riders" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <p class="admin-kicker">DELIVERY TEAM</p>
+              <h1>Riders</h1>
+              <p>Review applications and approve riders before assigning deliveries.</p>
+            </div>
+          </div>
+          <section class="admin-panel">
+            <div class="admin-panel-heading">
+              <div><h2>Rider applications</h2><p id="riderCountLabel">Loading rider applications...</p></div>
+            </div>
+            <div class="admin-table-scroll">
+              <table class="admin-record-table">
+                <thead><tr><th>Applicant</th><th>Phone &amp; vehicle</th><th>Registration</th><th>Payout account</th><th>Status</th><th>Applied</th><th>Actions</th></tr></thead>
+                <tbody id="adminRiderRows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="admin-view" id="adminPayoutsView" data-admin-panel="payouts" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <p class="admin-kicker">RIDER EARNINGS</p>
+              <h1>Payouts</h1>
+              <p>Review weekly payout requests and record payments after transferring funds.</p>
+            </div>
+          </div>
+          <section class="admin-panel">
+            <div class="admin-panel-heading">
+              <div><h2>Weekly payout requests</h2><p id="payoutCountLabel">Loading payout requests...</p></div>
+            </div>
+            <div class="admin-table-scroll">
+              <table class="admin-record-table">
+                <thead><tr><th>Rider</th><th>Week</th><th>Amount</th><th>Bank account</th><th>Status</th><th>Requested</th><th>Actions</th></tr></thead>
+                <tbody id="adminPayoutRows"></tbody>
+              </table>
+            </div>
+          </section>
         </section>
 
         <section class="admin-view" id="adminProductsView" data-admin-panel="products" hidden>

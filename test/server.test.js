@@ -81,6 +81,13 @@ test("serves the store and keeps the data files private", async t => {
 
   const accountPage = await fetch(`${baseUrl}/account.html`);
   assert.equal(accountPage.status, 200);
+  const riderPage = await fetch(`${baseUrl}/rider.html`);
+  assert.equal(riderPage.status, 200);
+  const riderPageHtml = await riderPage.text();
+  assert.match(riderPageHtml, /Rider portal/);
+  assert.doesNotMatch(riderPageHtml, /href="(?:index|admin)(?:\.html|\/|#)/);
+  const announcementScript = await fetch(`${baseUrl}/announcement.js`);
+  assert.equal(announcementScript.status, 200);
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
   const oldAdminPage = await fetch(`${baseUrl}/admin.html`, { redirect: "manual" });
@@ -254,22 +261,23 @@ test("registers customers and stores only salted password hashes", async t => {
     { action: "mark_delivered" },
     adminCookie
   );
-  assert.equal(skippedAdminAction.status, 409);
-
-  for (const [action, expectedStatus] of [
-    ["confirm_payment", "confirmed"],
-    ["mark_shipping", "shipping"],
-    ["mark_in_transit", "in_transit"],
-    ["mark_delivered", "delivered"]
-  ]) {
+  assert.equal(skippedAdminAction.status, 400);
+  const paymentConfirmed = await jsonRequest(
+    `${baseUrl}/api/admin/orders/${savedOrder.id}`,
+    "PATCH",
+    { action: "confirm_payment" },
+    adminCookie
+  );
+  assert.equal(paymentConfirmed.status, 200);
+  assert.equal((await paymentConfirmed.json()).order.status, "confirmed");
+  for (const action of ["mark_shipping", "mark_in_transit", "mark_delivered"]) {
     const response = await jsonRequest(
       `${baseUrl}/api/admin/orders/${savedOrder.id}`,
       "PATCH",
       { action },
       adminCookie
     );
-    assert.equal(response.status, 200);
-    assert.equal((await response.json()).order.status, expectedStatus);
+    assert.equal(response.status, 400);
   }
 
   const secondOrderResponse = await jsonRequest(`${baseUrl}/api/orders`, "POST", {
@@ -304,6 +312,184 @@ test("registers customers and stores only salted password hashes", async t => {
   });
   assert.equal(login.status, 200);
   assert.equal((await login.json()).user.email, "customer@example.com");
+});
+
+test("approves riders, enforces delivery codes, and pays weekly commission", async t => {
+  const smsMessages = [];
+  const smsRequests = [];
+  const emails = [];
+  let tokenRequest;
+  const app = await createTestApp(t, {
+    deliveryOtpSecret: "delivery-test-secret-with-at-least-32-characters",
+    brevoSmsSender: "AMGadget",
+    brevoOAuthClientId: "test-oauth-client",
+    brevoOAuthClientSecret: "test-oauth-secret",
+    brevoFetch: async (url, options) => {
+      if (url === "https://api.brevo.com/realms/partner/oauth/token") {
+        tokenRequest = options;
+        return new Response(JSON.stringify({ access_token: "test-sms-token", expires_in: 3600 }), { status: 200 });
+      }
+      if (url === "https://api.brevo.com/v3/transactionalSMS/send") {
+        smsMessages.push(JSON.parse(options.body));
+        smsRequests.push(options);
+        return new Response("{}", { status: 201 });
+      }
+      if (url === "https://api.brevo.com/v3/smtp/email") {
+        emails.push(JSON.parse(options.body));
+        return new Response("{}", { status: 201 });
+      }
+      throw new Error(`Unexpected Brevo URL: ${url}`);
+    }
+  });
+  const baseUrl = await app.listen();
+
+  const riderApplication = await jsonRequest(`${baseUrl}/api/rider/register`, "POST", {
+    name: "Test Rider",
+    email: "rider@example.com",
+    phone: "+234 801 234 5678",
+    password: "rider-password",
+    vehicleType: "Motorcycle",
+    licensePlate: "ABC 123 XY",
+    bankName: "Test Bank",
+    accountName: "Test Rider",
+    accountNumber: "1234567890"
+  });
+  assert.equal(riderApplication.status, 201);
+  assert.equal(riderApplication.headers.get("set-cookie"), null);
+  assert.match((await riderApplication.json()).message, /admin approves/);
+  const duplicateCustomerEmail = await jsonRequest(`${baseUrl}/api/auth/register`, "POST", {
+    name: "Rider as Customer",
+    email: "rider@example.com",
+    password: "customer-password",
+    phone: "+234 801 234 5678",
+    address: "123 Example Street, Abeokuta, Ogun State"
+  });
+  assert.equal(duplicateCustomerEmail.status, 409);
+  const pendingLogin = await jsonRequest(`${baseUrl}/api/rider/login`, "POST", {
+    email: "rider@example.com",
+    password: "rider-password"
+  });
+  assert.equal(pendingLogin.status, 403);
+
+  const adminLogin = await jsonRequest(`${baseUrl}/api/admin/login`, "POST", {
+    email: "owner@example.com",
+    password: "test-admin-password"
+  });
+  const adminCookie = sessionCookie(adminLogin);
+  const pendingRiders = await jsonRequest(`${baseUrl}/api/admin/riders`, "GET", undefined, adminCookie);
+  assert.equal(pendingRiders.status, 200);
+  const rider = (await pendingRiders.json())[0];
+  assert.equal(rider.status, "pending");
+  assert.equal("passwordHash" in rider, false);
+  const approval = await jsonRequest(`${baseUrl}/api/admin/riders/${rider.id}`, "PATCH", { action: "approve" }, adminCookie);
+  assert.equal(approval.status, 200);
+
+  const riderLogin = await jsonRequest(`${baseUrl}/api/rider/login`, "POST", {
+    email: "rider@example.com",
+    password: "rider-password"
+  });
+  assert.equal(riderLogin.status, 200);
+  const riderCookie = sessionCookie(riderLogin);
+  const customerRegistration = await jsonRequest(`${baseUrl}/api/auth/register`, "POST", {
+    name: "Delivery Customer",
+    email: "delivery-customer@example.com",
+    password: "customer-password",
+    phone: "+234 801 222 3344",
+    address: "123 Example Street, Abeokuta, Ogun State"
+  });
+  const customerCookie = sessionCookie(customerRegistration);
+  const createdOrderResponse = await jsonRequest(`${baseUrl}/api/orders`, "POST", {
+    items: [{ id: "volt-one-ultra", quantity: 1 }],
+    name: "Delivery Customer",
+    phone: "+234 801 222 3344",
+    address: "123 Example Street, Abeokuta, Ogun State"
+  }, customerCookie);
+  assert.equal(createdOrderResponse.status, 201);
+  const orderId = (await createdOrderResponse.json()).order.id;
+  const paymentReport = await jsonRequest(`${baseUrl}/api/orders/${orderId}/payment-reported`, "POST", {}, customerCookie);
+  assert.equal(paymentReport.status, 200);
+  const confirmed = await jsonRequest(`${baseUrl}/api/admin/orders/${orderId}`, "PATCH", { action: "confirm_payment" }, adminCookie);
+  assert.equal((await confirmed.json()).order.status, "confirmed");
+  const assigned = await jsonRequest(`${baseUrl}/api/admin/orders/${orderId}`, "PATCH", {
+    action: "mark_shipping",
+    riderId: rider.id
+  }, adminCookie);
+  assert.equal(assigned.status, 200);
+  assert.equal((await assigned.json()).order.status, "shipping");
+
+  const initialDashboard = await jsonRequest(`${baseUrl}/api/rider/dashboard`, "GET", undefined, riderCookie);
+  assert.equal(initialDashboard.status, 200);
+  assert.equal((await initialDashboard.json()).orders[0].status, "shipping");
+  const started = await jsonRequest(`${baseUrl}/api/rider/orders/${orderId}/start`, "PATCH", {}, riderCookie);
+  assert.equal(started.status, 200);
+  const requestedCode = await jsonRequest(`${baseUrl}/api/rider/orders/${orderId}/request-code`, "POST", {}, riderCookie);
+  assert.equal(requestedCode.status, 200);
+  const requestedCodeResult = await requestedCode.json();
+  assert.doesNotMatch(JSON.stringify(requestedCodeResult), /\b\d{6}\b/);
+  assert.match(requestedCodeResult.message, /email and phone/);
+  assert.equal(smsMessages.length, 1);
+  assert.match(tokenRequest.body, /scope=transactional\.sms%3Awrite/);
+  assert.equal(smsRequests[0].headers.authorization, "Bearer test-sms-token");
+  assert.equal("api-key" in smsRequests[0].headers, false);
+  const codeMatch = smsMessages[0].content.match(/code: (\d{6})\./);
+  assert.ok(codeMatch);
+  assert.equal(emails.some(email => email.subject.includes("Delivery confirmation code")), true);
+
+  const customerOrders = await jsonRequest(`${baseUrl}/api/orders`, "GET", undefined, customerCookie);
+  const customerOrderPayload = JSON.stringify(await customerOrders.json());
+  assert.doesNotMatch(customerOrderPayload, /deliveryCodeHash|deliveryCodeExpiresAt|riderId/);
+  const storedOrders = JSON.parse(await fs.readFile(path.join(app.dataDirectory, "orders.json"), "utf8"));
+  const storedOrder = storedOrders.find(order => order.id === orderId);
+  assert.notEqual(storedOrder.deliveryCodeHash, codeMatch[1]);
+  assert.equal("deliveryCode" in storedOrder, false);
+
+  const cooldown = await jsonRequest(`${baseUrl}/api/rider/orders/${orderId}/request-code`, "POST", {}, riderCookie);
+  assert.equal(cooldown.status, 429);
+  const incorrectCode = codeMatch[1] === "000000" ? "999999" : "000000";
+  for (let attemptsRemaining = 4; attemptsRemaining >= 0; attemptsRemaining -= 1) {
+    const incorrectVerification = await jsonRequest(`${baseUrl}/api/rider/orders/${orderId}/verify-code`, "POST", {
+      code: incorrectCode
+    }, riderCookie);
+    assert.equal(incorrectVerification.status, 400);
+    assert.equal((await incorrectVerification.json()).attemptsRemaining, attemptsRemaining);
+  }
+  const lockedVerification = await jsonRequest(`${baseUrl}/api/rider/orders/${orderId}/verify-code`, "POST", {
+    code: codeMatch[1]
+  }, riderCookie);
+  assert.equal(lockedVerification.status, 429);
+  const refreshedOrders = JSON.parse(await fs.readFile(path.join(app.dataDirectory, "orders.json"), "utf8"));
+  refreshedOrders.find(order => order.id === orderId).deliveryCodeRequestedAt = new Date(Date.now() - 61000).toISOString();
+  await fs.writeFile(path.join(app.dataDirectory, "orders.json"), `${JSON.stringify(refreshedOrders, null, 2)}\n`);
+  const resentCode = await jsonRequest(`${baseUrl}/api/rider/orders/${orderId}/request-code`, "POST", {}, riderCookie);
+  assert.equal(resentCode.status, 200);
+  const resentCodeMatch = smsMessages[1].content.match(/code: (\d{6})\./);
+  assert.ok(resentCodeMatch);
+  const verified = await jsonRequest(`${baseUrl}/api/rider/orders/${orderId}/verify-code`, "POST", {
+    code: resentCodeMatch[1]
+  }, riderCookie);
+  assert.equal(verified.status, 200);
+  assert.equal((await verified.json()).order.riderCommission, 75);
+
+  const completedDashboard = await jsonRequest(`${baseUrl}/api/rider/dashboard`, "GET", undefined, riderCookie);
+  const completedData = await completedDashboard.json();
+  assert.equal(completedData.earnings.availableBalance, 75);
+  assert.equal(completedData.earnings.canRequestPayout, true);
+  const payout = await jsonRequest(`${baseUrl}/api/rider/payout-requests`, "POST", {}, riderCookie);
+  assert.equal(payout.status, 201);
+  assert.equal((await payout.json()).payoutRequest.amount, 75);
+  const duplicatePayout = await jsonRequest(`${baseUrl}/api/rider/payout-requests`, "POST", {}, riderCookie);
+  assert.equal(duplicatePayout.status, 409);
+
+  const payoutList = await jsonRequest(`${baseUrl}/api/admin/payout-requests`, "GET", undefined, adminCookie);
+  assert.equal(payoutList.status, 200);
+  const payoutRecord = (await payoutList.json())[0];
+  assert.equal(payoutRecord.accountNumber, "1234567890");
+  const payoutReview = await jsonRequest(`${baseUrl}/api/admin/payout-requests/${payoutRecord.id}`, "PATCH", {
+    action: "mark_paid"
+  }, adminCookie);
+  assert.equal(payoutReview.status, 200);
+  const paidDashboard = await jsonRequest(`${baseUrl}/api/rider/dashboard`, "GET", undefined, riderCookie);
+  assert.equal((await paidDashboard.json()).earnings.availableBalance, 0);
 });
 
 test("marks session cookies Secure in production", async t => {

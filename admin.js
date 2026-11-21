@@ -12,6 +12,8 @@ const stockFilter = document.querySelector("#stockFilter");
 const pageSizeSelect = document.querySelector("#pageSize");
 const userRows = document.querySelector("#adminUserRows");
 const orderRows = document.querySelector("#adminOrderRows");
+const riderRows = document.querySelector("#adminRiderRows");
+const payoutRows = document.querySelector("#adminPayoutRows");
 const userSearch = document.querySelector("#userSearch");
 const orderSearch = document.querySelector("#orderSearch");
 const orderDetailBackdrop = document.querySelector("#adminOrderDetailBackdrop");
@@ -22,6 +24,8 @@ const orderDetailMessage = document.querySelector("#adminOrderDetailMessage");
 let products = [];
 let users = [];
 let orders = [];
+let riders = [];
+let payoutRequests = [];
 let selectedProductId = null;
 let selectedOrderId = null;
 let editingProductId = null;
@@ -40,9 +44,13 @@ async function adminRequest(path, options = {}) {
       products = [];
       users = [];
       orders = [];
+      riders = [];
+      payoutRequests = [];
       productRows.replaceChildren();
       userRows.replaceChildren();
       orderRows.replaceChildren();
+      riderRows.replaceChildren();
+      payoutRows.replaceChildren();
       productManager.hidden = true;
       adminUserBar.hidden = true;
       adminLoginPanel.hidden = false;
@@ -78,7 +86,7 @@ function setAdminView(view) {
     button.classList.toggle("active", active);
     button.setAttribute("aria-current", active ? "page" : "false");
   });
-  const titles = { overview: "Dashboard", products: "Products", users: "Users", orders: "Orders" };
+  const titles = { overview: "Dashboard", products: "Products", users: "Users", orders: "Orders", riders: "Riders", payouts: "Payouts" };
   document.querySelector("#adminPageTitle").textContent = titles[view] || "Dashboard";
 }
 
@@ -203,6 +211,8 @@ function renderDashboard() {
   document.querySelector("#categoryCount").textContent = categories.size.toLocaleString();
   document.querySelector("#adminUserCount").textContent = users.length.toLocaleString();
   document.querySelector("#adminOrderCount").textContent = orders.length.toLocaleString();
+  document.querySelector("#adminRiderCount").textContent = riders.filter(rider => rider.status === "pending").length.toLocaleString();
+  document.querySelector("#adminPayoutCount").textContent = payoutRequests.filter(payout => payout.status === "pending").length.toLocaleString();
 
   const recentProductList = document.querySelector("#recentProductList");
   recentProductList.replaceChildren();
@@ -273,6 +283,144 @@ function renderUsers() {
   });
   document.querySelector("#userCountLabel").textContent =
     `${filtered.length} user${filtered.length === 1 ? "" : "s"}${search ? " found" : ""}`;
+}
+
+function makeAdminActionButton(action, id, label, style = "") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `admin-secondary-button ${style}`.trim();
+  button.dataset.adminAction = action;
+  button.dataset.recordId = id;
+  button.textContent = label;
+  return button;
+}
+
+function renderRiders() {
+  riderRows.replaceChildren();
+  if (!riders.length) createEmptyRow(riderRows, 7, "No rider applications have been submitted yet.");
+  riders.forEach(rider => {
+    const row = document.createElement("tr");
+    const person = document.createElement("div");
+    const name = document.createElement("strong");
+    const email = document.createElement("small");
+    const vehicle = document.createElement("div");
+    const vehicleName = document.createElement("strong");
+    const phone = document.createElement("small");
+    const bank = document.createElement("div");
+    const bankName = document.createElement("strong");
+    const accountDetails = document.createElement("small");
+    const status = document.createElement("span");
+    const actions = document.createElement("div");
+    const personCell = document.createElement("td");
+    const vehicleCell = document.createElement("td");
+    const bankCell = document.createElement("td");
+    const statusCell = document.createElement("td");
+    const actionsCell = document.createElement("td");
+
+    person.className = "admin-record-person";
+    name.textContent = rider.name || "Unnamed applicant";
+    email.textContent = rider.email || "No email";
+    person.append(name, email);
+    personCell.append(person);
+
+    vehicle.className = "admin-record-person";
+    vehicleName.textContent = rider.vehicleType || "Vehicle not provided";
+    phone.textContent = rider.phone || "No phone";
+    vehicle.append(vehicleName, phone);
+    vehicleCell.append(vehicle);
+
+    bank.className = "admin-record-person";
+    bankName.textContent = rider.bankName || "No bank";
+    accountDetails.textContent = `${rider.accountName || "No account name"} · ${rider.accountNumber || "No account number"}`;
+    bank.append(bankName, accountDetails);
+    bankCell.append(bank);
+
+    status.className = `admin-record-tag ${rider.status === "active" ? "available" : ""}`;
+    status.textContent = rider.status || "pending";
+    statusCell.append(status);
+    actions.className = "admin-record-actions";
+    if (rider.status === "pending") {
+      actions.append(
+        makeAdminActionButton("approve-rider", rider.id, "Approve", "admin-approve-button"),
+        makeAdminActionButton("reject-rider", rider.id, "Reject", "admin-reject-button")
+      );
+    } else {
+      actions.textContent = "—";
+    }
+    actionsCell.append(actions);
+    row.append(
+      personCell,
+      vehicleCell,
+      createTableCell(rider.licensePlate || "—"),
+      bankCell,
+      statusCell,
+      createTableCell(formatOrderDate(rider.createdAt), "admin-nowrap"),
+      actionsCell
+    );
+    riderRows.append(row);
+  });
+  const pending = riders.filter(rider => rider.status === "pending").length;
+  document.querySelector("#riderCountLabel").textContent =
+    `${riders.length} rider${riders.length === 1 ? "" : "s"} · ${pending} awaiting review`;
+}
+
+function renderPayoutRequests() {
+  payoutRows.replaceChildren();
+  if (!payoutRequests.length) createEmptyRow(payoutRows, 7, "No weekly payout requests have been submitted.");
+  payoutRequests.forEach(payout => {
+    const row = document.createElement("tr");
+    const rider = document.createElement("div");
+    const name = document.createElement("strong");
+    const email = document.createElement("small");
+    const bank = document.createElement("div");
+    const bankName = document.createElement("strong");
+    const accountDetails = document.createElement("small");
+    const status = document.createElement("span");
+    const actions = document.createElement("div");
+    const riderCell = document.createElement("td");
+    const bankCell = document.createElement("td");
+    const statusCell = document.createElement("td");
+    const actionsCell = document.createElement("td");
+
+    rider.className = "admin-record-person";
+    name.textContent = payout.riderName || "Rider";
+    email.textContent = payout.riderEmail || "No email";
+    rider.append(name, email);
+    riderCell.append(rider);
+
+    bank.className = "admin-record-person";
+    bankName.textContent = payout.bankName || "No bank";
+    accountDetails.textContent = `${payout.accountName || "No account name"} · ${payout.accountNumber || "No account number"}`;
+    bank.append(bankName, accountDetails);
+    bankCell.append(bank);
+
+    status.className = `admin-record-tag ${payout.status === "paid" ? "available" : ""}`;
+    status.textContent = payout.status || "pending";
+    statusCell.append(status);
+    actions.className = "admin-record-actions";
+    if (payout.status === "pending") {
+      actions.append(
+        makeAdminActionButton("mark-payout-paid", payout.id, "Mark paid", "admin-approve-button"),
+        makeAdminActionButton("reject-payout", payout.id, "Reject", "admin-reject-button")
+      );
+    } else {
+      actions.textContent = "—";
+    }
+    actionsCell.append(actions);
+    row.append(
+      riderCell,
+      createTableCell(payout.weekKey, "admin-nowrap"),
+      createTableCell(formatPrice(payout.amount), "admin-nowrap"),
+      bankCell,
+      statusCell,
+      createTableCell(formatOrderDate(payout.createdAt), "admin-nowrap"),
+      actionsCell
+    );
+    payoutRows.append(row);
+  });
+  const pending = payoutRequests.filter(payout => payout.status === "pending").length;
+  document.querySelector("#payoutCountLabel").textContent =
+    `${payoutRequests.length} request${payoutRequests.length === 1 ? "" : "s"} · ${pending} awaiting payment`;
 }
 
 function formatOrderDate(value) {
@@ -359,7 +507,7 @@ function formatOrderStatus(status) {
     pending_payment: "Pending payment",
     payment_reported: "Payment reported",
     confirmed: "Payment confirmed",
-    shipping: "Preparing shipment",
+    shipping: "Assigned to rider",
     in_transit: "In transit",
     delivered: "Delivered",
     cancelled: "Cancelled"
@@ -388,6 +536,11 @@ function renderOrderDetail(order) {
     line.textContent = value;
     customer.append(line);
   });
+  if (order.riderName) {
+    const assignment = document.createElement("span");
+    assignment.textContent = `Assigned rider: ${order.riderName}${order.riderEmail ? ` (${order.riderEmail})` : ""}`;
+    customer.append(assignment);
+  }
   orderDetailContent.append(customer);
 
   const itemList = document.createElement("div");
@@ -433,9 +586,16 @@ function renderOrderDetail(order) {
 
   const actions = [];
   if (order.status === "payment_reported") actions.push(["confirm_payment", "Confirm payment", "primary"]);
-  if (order.status === "confirmed") actions.push(["mark_shipping", "Prepare shipment", "primary"]);
-  if (order.status === "shipping") actions.push(["mark_in_transit", "Mark in transit", "primary"]);
-  if (order.status === "in_transit") actions.push(["mark_delivered", "Mark delivered", "primary"]);
+  if (order.status === "confirmed") {
+    const activeRiders = riders.filter(rider => rider.status === "active");
+    const riderSelect = document.createElement("select");
+    riderSelect.id = "orderRiderSelect";
+    riderSelect.setAttribute("aria-label", "Select an approved rider");
+    riderSelect.append(new Option(activeRiders.length ? "Select an approved rider" : "No approved riders", ""));
+    activeRiders.forEach(rider => riderSelect.add(new Option(`${rider.name} · ${rider.phone}`, rider.id)));
+    orderDetailActions.append(riderSelect);
+    actions.push(["mark_shipping", "Assign & prepare shipment", "primary"]);
+  }
   if (["pending_payment", "payment_reported", "confirmed", "shipping", "in_transit"].includes(order.status)) {
     actions.push(["cancel", "Cancel order", "danger"]);
   }
@@ -444,7 +604,16 @@ function renderOrderDetail(order) {
     button.type = "button";
     button.className = `admin-order-action ${style}`;
     button.textContent = label;
-    button.addEventListener("click", () => updateOrderAction(order.id, action, button));
+    if (action === "mark_shipping" && riders.every(rider => rider.status !== "active")) button.disabled = true;
+    button.addEventListener("click", () => {
+      const riderSelect = document.querySelector("#orderRiderSelect");
+      if (action === "mark_shipping" && (!riderSelect || !riderSelect.value)) {
+        orderDetailMessage.textContent = "Select an approved rider before assigning this delivery.";
+        orderDetailMessage.hidden = false;
+        return;
+      }
+      updateOrderAction(order.id, action, button, action === "mark_shipping" ? { riderId: riderSelect.value } : {});
+    });
     orderDetailActions.append(button);
   });
 
@@ -454,18 +623,24 @@ function renderOrderDetail(order) {
   } else if (order.status === "payment_reported") {
     orderDetailMessage.textContent = "Verify the transfer in your bank before confirming payment.";
     orderDetailMessage.hidden = false;
+  } else if (order.status === "shipping") {
+    orderDetailMessage.textContent = "The assigned rider can now start this delivery from their dashboard.";
+    orderDetailMessage.hidden = false;
+  } else if (order.status === "in_transit") {
+    orderDetailMessage.textContent = "The rider must verify the customer's code before this order can be marked delivered.";
+    orderDetailMessage.hidden = false;
   }
   orderDetailBackdrop.hidden = false;
 }
 
-async function updateOrderAction(orderId, action, button) {
+async function updateOrderAction(orderId, action, button, details = {}) {
   button.disabled = true;
   orderDetailMessage.hidden = false;
   orderDetailMessage.textContent = "Updating order...";
   try {
     const result = await adminRequest(`/api/admin/orders/${encodeURIComponent(orderId)}`, {
       method: "PATCH",
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ action, ...details })
     });
     const orderIndex = orders.findIndex(order => order.id === orderId);
     if (orderIndex !== -1) orders[orderIndex] = { ...orders[orderIndex], ...result.order };
@@ -501,16 +676,54 @@ orderDetailBackdrop.addEventListener("click", event => {
 });
 
 async function loadAdminData() {
-  [products, users, orders] = await Promise.all([
+  [products, users, orders, riders, payoutRequests] = await Promise.all([
     adminRequest("/api/products"),
     adminRequest("/api/admin/users"),
-    adminRequest("/api/admin/orders")
+    adminRequest("/api/admin/orders"),
+    adminRequest("/api/admin/riders"),
+    adminRequest("/api/admin/payout-requests")
   ]);
   renderCategoryOptions();
   renderDashboard();
   renderProductRows();
   renderUsers();
   renderOrders();
+  renderRiders();
+  renderPayoutRequests();
+}
+
+async function updateAdminRecord(button) {
+  const action = button.dataset.adminAction;
+  const id = button.dataset.recordId;
+  const isRiderAction = action === "approve-rider" || action === "reject-rider";
+  const endpoint = isRiderAction
+    ? `/api/admin/riders/${encodeURIComponent(id)}`
+    : `/api/admin/payout-requests/${encodeURIComponent(id)}`;
+  const bodyAction = action === "approve-rider" ? "approve"
+    : action === "reject-rider" || action === "reject-payout" ? "reject"
+    : "mark_paid";
+  const record = isRiderAction
+    ? riders.find(rider => rider.id === id)
+    : payoutRequests.find(payout => payout.id === id);
+  if (action === "mark-payout-paid" && record &&
+      !window.confirm(`Confirm that ₦${Number(record.amount).toLocaleString()} has been transferred to ${record.accountName || record.riderName}?`)) {
+    return;
+  }
+  button.disabled = true;
+  try {
+    await adminRequest(endpoint, {
+      method: "PATCH",
+      body: JSON.stringify({ action: bodyAction })
+    });
+    await loadAdminData();
+    const description = isRiderAction
+      ? `Rider application ${bodyAction === "approve" ? "approved" : "rejected"}.`
+      : `Payout request ${bodyAction === "mark_paid" ? "marked as paid" : "rejected"}.`;
+    showAdminStatus(description);
+  } catch (error) {
+    showAdminStatus(error.message, true);
+    button.disabled = false;
+  }
 }
 
 function showProductManager() {
@@ -656,6 +869,14 @@ document.querySelector("#adminLogout").addEventListener("click", async () => {
 document.querySelectorAll("[data-admin-view]").forEach(button => {
   button.addEventListener("click", () => setAdminView(button.dataset.adminView));
 });
+riderRows.addEventListener("click", event => {
+  const button = event.target.closest("[data-admin-action]");
+  if (button) updateAdminRecord(button);
+});
+payoutRows.addEventListener("click", event => {
+  const button = event.target.closest("[data-admin-action]");
+  if (button) updateAdminRecord(button);
+});
 document.querySelectorAll("[data-open-product-form]").forEach(button => {
   button.addEventListener("click", openProductForm);
 });
@@ -708,6 +929,9 @@ adminRequest("/api/auth/session")
     if (result.user && result.user.role === "admin") showProductManager();
     if (result.user && result.user.role === "customer") {
       showAdminStatus("This area is for the store admin. Sign out of your customer account first.", true);
+    }
+    if (result.user && result.user.role === "rider") {
+      showAdminStatus("This area is for the store admin. Sign out of your rider account first.", true);
     }
   })
   .catch(error => showAdminStatus(error.message, true));

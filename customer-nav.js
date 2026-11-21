@@ -20,6 +20,14 @@ function renderAccountMenu() {
     `;
     return;
   }
+  if (currentUser && currentUser.role === "rider") {
+    accountMenu.innerHTML = `
+      <a href="rider.html">Rider dashboard</a>
+      <button class="account-logout" type="button">Sign out</button>
+      <p class="account-menu-status" role="status" aria-live="polite"></p>
+    `;
+    return;
+  }
   accountMenu.innerHTML = `
     <a href="profile.html">Profile</a>
     <a href="account-info.html">Account info</a>
@@ -39,14 +47,6 @@ if (!document.querySelector("#productGrid") && !document.querySelector("#loginFo
       nav.classList.remove("open");
       menuButton.setAttribute("aria-expanded", "false");
     });
-  });
-}
-
-if (!document.querySelector("#productGrid") && !document.querySelector("#loginForm")) {
-  document.querySelector(".announcement button").addEventListener("click", event => {
-    event.currentTarget.parentElement.remove();
-    document.querySelector(".header").style.top = "0";
-    nav.style.top = "82px";
   });
 }
 

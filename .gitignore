@@ -2,5 +2,7 @@
 data/users.json
 data/orders.json
 data/sessions.json
+data/riders.json
+data/payout_requests.json
 data/uploads/
 node_modules/

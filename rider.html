@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0b0f">
+  <title>Rider Portal | A&amp;M Gadget</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="rider-portal">
+  <div class="announcement">
+    <p>Check your dashboard for new assigned deliveries.</p>
+    <button aria-label="Close announcement">&times;</button>
+  </div>
+  <header class="header rider-header">
+    <div class="brand" aria-label="A&amp;M Gadget rider portal">
+      <span class="brand-mark">A&amp;M</span>
+      <span>A&amp;M Gadget</span>
+    </div>
+    <div class="rider-header-label">RIDER PORTAL</div>
+  </header>
+
+  <main class="rider-main">
+    <p class="rider-status" id="riderStatus" role="status" aria-live="polite"></p>
+    <section class="form-card rider-auth" id="riderAuth">
+      <p class="eyebrow dark"><span></span> A&amp;M Gadget delivery team</p>
+      <h1>Rider portal</h1>
+      <p class="form-intro">Apply to deliver orders or sign in to manage your assigned deliveries.</p>
+      <div class="form-tabs" role="tablist" aria-label="Rider portal options">
+        <button class="form-tab active" id="riderShowLogin" type="button" role="tab" aria-selected="true">Sign in</button>
+        <button class="form-tab" id="riderShowRegister" type="button" role="tab" aria-selected="false">Apply to ride</button>
+      </div>
+      <form class="site-form" id="riderLoginForm">
+        <label>Email address<input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128"></label>
+        <button class="button button-primary" type="submit">Sign in <span>→</span></button>
+      </form>
+      <form class="site-form rider-register-form" id="riderRegisterForm" hidden>
+        <label>Full name<input name="name" type="text" autocomplete="name" required maxlength="80"></label>
+        <label>Email address<input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+        <label>Phone number<input name="phone" type="tel" autocomplete="tel" required minlength="7" maxlength="30" placeholder="+234 801 234 5678"></label>
+        <label>Vehicle type
+          <select name="vehicleType" required>
+            <option value="">Choose a vehicle</option>
+            <option>Motorcycle</option>
+            <option>Car</option>
+            <option>Bicycle</option>
+            <option>Other</option>
+          </select>
+        </label>
+        <label>Vehicle registration (optional)<input name="licensePlate" type="text" autocomplete="off" maxlength="20"></label>
+        <label>Bank name<input name="bankName" type="text" autocomplete="organization" required maxlength="80"></label>
+        <label>Account name<input name="accountName" type="text" autocomplete="name" required maxlength="80"></label>
+        <label>10-digit account number<input name="accountNumber" type="text" inputmode="numeric" autocomplete="off" required pattern="[0-9]{10}" maxlength="10"></label>
+        <label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></label>
+        <p class="form-help">Applications are reviewed by the store admin. Weekly payout requests can only be made from your available delivery earnings.</p>
+        <button class="button button-primary" type="submit">Submit application <span>→</span></button>
+      </form>
+    </section>
+
+    <section class="rider-dashboard" id="riderDashboard" hidden>
+      <div class="rider-workspace">
+        <aside class="rider-sidebar">
+          <p>RIDER PORTAL</p>
+          <nav aria-label="Rider dashboard navigation">
+            <button type="button" class="active" data-rider-view="overview">Overview</button>
+            <button type="button" data-rider-view="deliveries">My deliveries</button>
+            <button type="button" data-rider-view="earnings">Earnings &amp; payouts</button>
+          </nav>
+          <button type="button" class="rider-logout" id="riderLogout">Sign out</button>
+        </aside>
+        <div class="rider-content">
+          <section class="rider-panel" data-rider-panel="overview">
+            <div class="rider-page-heading">
+              <p class="eyebrow dark"><span></span> Rider dashboard</p>
+              <h1>Welcome, <span id="riderName">Rider</span></h1>
+              <p>Your assigned orders, delivery progress, and earnings.</p>
+            </div>
+            <div class="rider-stat-grid">
+              <article><span>Assigned deliveries</span><strong id="riderActiveCount">0</strong></article>
+              <article><span>Completed deliveries</span><strong id="riderDeliveredCount">0</strong></article>
+              <article><span>Available earnings</span><strong id="riderBalance">₦0</strong></article>
+            </div>
+            <div class="rider-panel-heading"><h2>Recent deliveries</h2><button type="button" data-rider-view="deliveries">View all</button></div>
+            <div class="rider-order-list" id="riderRecentOrders"></div>
+          </section>
+
+          <section class="rider-panel" data-rider-panel="deliveries" hidden>
+            <div class="rider-page-heading">
+              <p class="eyebrow dark"><span></span> Your route</p>
+              <h1>My deliveries</h1>
+              <p>Start assigned deliveries, then verify the customer's code after handoff.</p>
+            </div>
+            <div class="rider-order-list" id="riderOrders"></div>
+          </section>
+
+          <section class="rider-panel" data-rider-panel="earnings" hidden>
+            <div class="rider-page-heading">
+              <p class="eyebrow dark"><span></span> Rider payments</p>
+              <h1>Earnings &amp; payouts</h1>
+              <p>You earn 3% of the delivery fee for each delivery confirmed by the customer's code.</p>
+            </div>
+            <div class="rider-earnings-card">
+              <div><span>Total earned</span><strong id="riderTotalEarned">₦0</strong></div>
+              <div><span>Available for payout</span><strong id="riderAvailableBalance">₦0</strong></div>
+              <div><span>Payout account</span><strong id="riderAccountEnding">••••</strong></div>
+            </div>
+            <div class="rider-payout-actions">
+              <p id="riderPayoutMessage" role="status" aria-live="polite"></p>
+              <button class="button button-primary" type="button" id="requestPayout">Request this week's payout</button>
+            </div>
+            <div class="rider-panel-heading"><h2>Payout history</h2></div>
+            <div class="rider-payout-list" id="riderPayoutHistory"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="brand"><span class="brand-mark">A&amp;M</span><span>A&amp;M Gadget</span></span>
+    <p>Rider delivery portal</p>
+  </footer>
+  <script src="announcement.js"></script>
+  <script src="rider.js"></script>
+</body>
+</html>

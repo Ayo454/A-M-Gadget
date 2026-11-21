@@ -106,11 +106,6 @@ registerForm.addEventListener("submit", async event => {
 
 const menuButton = document.querySelector(".menu-button");
 const nav = document.querySelector(".nav");
-document.querySelector(".announcement button").addEventListener("click", event => {
-  event.currentTarget.parentElement.remove();
-  document.querySelector(".header").style.top = "0";
-  nav.style.top = "82px";
-});
 menuButton.addEventListener("click", () => {
   const open = nav.classList.toggle("open");
   menuButton.setAttribute("aria-expanded", String(open));
@@ -121,6 +116,9 @@ accountRequest("/api/auth/session")
     if (result.user && result.user.role === "customer") window.location.replace("profile.html");
     if (result.user && result.user.role === "admin") {
       showAccountStatus("The store admin is signed in in this browser. Sign out from the account icon before signing in as a customer.");
+    }
+    if (result.user && result.user.role === "rider") {
+      showAccountStatus("A rider account is signed in in this browser. Continue to the rider portal or sign out before using a customer account.");
     }
   })
   .catch(error => showAccountStatus(error.message, true));

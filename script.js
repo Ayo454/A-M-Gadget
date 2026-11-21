@@ -139,12 +139,6 @@ if (featuredButton) {
   });
 }
 
-document.querySelector(".announcement button").addEventListener("click", event => {
-  event.currentTarget.parentElement.remove();
-  document.querySelector(".header").style.top = "0";
-  document.querySelector(".search-panel").style.top = "82px";
-});
-
 const menuButton = document.querySelector(".menu-button");
 const nav = document.querySelector(".nav");
 menuButton.addEventListener("click", () => {

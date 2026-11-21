@@ -51,6 +51,25 @@ function safeEqual(left, right) {
   return crypto.timingSafeEqual(leftHash, rightHash);
 }
 
+function isoWeekKey(value = new Date()) {
+  const date = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const year = date.getUTCFullYear();
+  const firstThursday = new Date(Date.UTC(year, 0, 4));
+  firstThursday.setUTCDate(firstThursday.getUTCDate() + 4 - (firstThursday.getUTCDay() || 7));
+  const week = 1 + Math.round((date - firstThursday) / 604800000);
+  return `${year}-W${String(week).padStart(2, "0")}`;
+}
+
+function normalizeSmsPhone(value) {
+  const phone = String(value || "").trim();
+  const digits = phone.replace(/\D/g, "");
+  if (/^0\d{10}$/.test(digits)) return `234${digits.slice(1)}`;
+  if (/^234\d{10}$/.test(digits)) return digits;
+  if (phone.startsWith("+") && digits.length >= 8 && digits.length <= 15) return digits;
+  throw Object.assign(new Error("The delivery phone number must include its international country code."), { status: 400 });
+}
+
 function readCookies(request) {
   return Object.fromEntries((request.headers.cookie || "")
     .split(";")
@@ -199,7 +218,13 @@ function createServer(options = {}) {
   const brevoApiKey = String(options.brevoApiKey ?? process.env.BREVO_API_KEY ?? "").trim();
   const brevoSenderEmail = String(options.brevoSenderEmail ?? process.env.BREVO_SENDER_EMAIL ?? "").trim();
   const brevoSenderName = String(options.brevoSenderName ?? process.env.BREVO_SENDER_NAME ?? "A&M Gadget").trim();
+  const brevoSmsSender = String(options.brevoSmsSender ?? process.env.BREVO_SMS_SENDER ?? "").trim();
+  const brevoOAuthClientId = String(options.brevoOAuthClientId ?? process.env.BREVO_OAUTH_CLIENT_ID ?? "").trim();
+  const brevoOAuthClientSecret = String(options.brevoOAuthClientSecret ?? process.env.BREVO_OAUTH_CLIENT_SECRET ?? "").trim();
+  const deliveryOtpSecret = String(options.deliveryOtpSecret ?? process.env.DELIVERY_OTP_SECRET ?? "").trim();
   const brevoFetch = options.brevoFetch || globalThis.fetch;
+  let brevoSmsToken = "";
+  let brevoSmsTokenExpiresAt = 0;
   const deliveryOrigin = String(options.deliveryOrigin ?? process.env.DELIVERY_ORIGIN ?? "Ilishan-Remo, Ogun State, Nigeria").trim();
   const geocoderUrl = String(options.geocoderUrl ?? "https://nominatim.openstreetmap.org/search").replace(/\/$/, "");
   const photonUrl = String(options.photonUrl ?? "https://photon.komoot.io/api").replace(/\/$/, "");
@@ -386,6 +411,52 @@ function createServer(options = {}) {
     if (!response.ok) throw new Error(`Brevo returned HTTP ${response.status} while sending email.`);
   }
 
+  async function getBrevoSmsToken() {
+    if (brevoSmsToken && brevoSmsTokenExpiresAt > Date.now() + 30000) return brevoSmsToken;
+    if (!brevoOAuthClientId || !brevoOAuthClientSecret) {
+      throw new Error("Configure BREVO_OAUTH_CLIENT_ID and BREVO_OAUTH_CLIENT_SECRET to send delivery SMS.");
+    }
+    const body = new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: brevoOAuthClientId,
+      client_secret: brevoOAuthClientSecret,
+      scope: "transactional.sms:write"
+    });
+    const response = await brevoFetch("https://api.brevo.com/realms/partner/oauth/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+    if (!response.ok) throw new Error(`Brevo OAuth returned HTTP ${response.status} while requesting an SMS token.`);
+    const tokenResult = await response.json();
+    if (!tokenResult || typeof tokenResult.access_token !== "string" ||
+        !Number.isFinite(Number(tokenResult.expires_in)) || Number(tokenResult.expires_in) <= 0) {
+      throw new Error("Brevo returned an invalid SMS authorization token.");
+    }
+    brevoSmsToken = tokenResult.access_token;
+    brevoSmsTokenExpiresAt = Date.now() + Number(tokenResult.expires_in) * 1000;
+    return brevoSmsToken;
+  }
+
+  async function sendBrevoSms({ recipientPhone, content }) {
+    const validSmsSender = /^\d{1,15}$/.test(brevoSmsSender) || /^[A-Za-z0-9]{1,11}$/.test(brevoSmsSender);
+    if (!brevoSmsSender || !validSmsSender) {
+      throw new Error("Configure a valid BREVO_SMS_SENDER (up to 11 alphanumeric or 15 numeric characters) to send delivery SMS.");
+    }
+    const recipient = normalizeSmsPhone(recipientPhone);
+    const token = await getBrevoSmsToken();
+    const response = await brevoFetch("https://api.brevo.com/v3/transactionalSMS/send", {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "authorization": `Bearer ${token}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ sender: brevoSmsSender, recipient, content, type: "transactional" })
+    });
+    if (!response.ok) throw new Error(`Brevo returned HTTP ${response.status} while sending SMS.`);
+  }
+
   async function notifyCustomer(eventName, email) {
     try {
       await sendBrevoEmail(email);
@@ -426,6 +497,22 @@ function createServer(options = {}) {
     } catch (error) {
       console.error("Could not prepare the Brevo order status email:", error.message);
     }
+  }
+
+  async function notifyRiderAssignment(order, rider) {
+    await notifyCustomer("rider assignment", {
+      recipientEmail: rider.email,
+      recipientName: rider.name,
+      subject: `New delivery assigned: ${order.id.slice(0, 8)}`,
+      title: "A delivery has been assigned to you",
+      paragraphs: [
+        `Order ${order.id} is ready for delivery.`,
+        `Recipient: ${order.recipientName || "Customer"}.`,
+        `Delivery phone: ${order.recipientPhone || "Not provided"}.`,
+        `Delivery address: ${order.shippingAddress}.`,
+        "Sign in to your rider dashboard to start the delivery."
+      ]
+    });
   }
 
   async function readStore(name, initialValue) {
@@ -722,7 +809,7 @@ function createServer(options = {}) {
           const user = record && record.user;
           if (!record || typeof record.tokenHash !== "string" || !/^[a-f0-9]{64}$/.test(record.tokenHash) ||
               !user || typeof user.id !== "string" || typeof user.email !== "string" ||
-              typeof user.name !== "string" || !["admin", "customer"].includes(user.role)) {
+              typeof user.name !== "string" || !["admin", "customer", "rider"].includes(user.role)) {
             throw new Error("The stored sessions file contains an invalid session.");
           }
           sessions.set(record.tokenHash, { user: sessionUser(user) });
@@ -789,7 +876,8 @@ function createServer(options = {}) {
       role: user.role,
       phone: user.phone || "",
       address: user.address || "",
-      avatarUrl: user.avatarFile ? "/api/auth/avatar" : null
+      avatarUrl: user.avatarFile ? "/api/auth/avatar" : null,
+      vehicleType: user.vehicleType || ""
     };
   }
 
@@ -798,6 +886,141 @@ function createServer(options = {}) {
 
     if (route === "GET /api/products") {
       jsonResponse(response, 200, await readStore("products.json", defaultProducts));
+      return;
+    }
+
+    if (route === "GET /api/admin/riders") {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to view riders." });
+        return;
+      }
+      const riders = await readStore("riders.json", []);
+      jsonResponse(response, 200, riders.map(rider => ({
+        id: rider.id,
+        name: rider.name,
+        email: rider.email,
+        phone: rider.phone,
+        vehicleType: rider.vehicleType,
+        licensePlate: rider.licensePlate,
+        bankName: rider.bankName,
+        accountName: rider.accountName,
+        accountNumber: rider.accountNumber,
+        status: rider.status,
+        createdAt: rider.createdAt,
+        approvedAt: rider.approvedAt || null
+      })));
+      return;
+    }
+
+    const adminRiderMatch = url.pathname.match(/^\/api\/admin\/riders\/([^/]+)$/);
+    if (request.method === "PATCH" && adminRiderMatch) {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to update riders." });
+        return;
+      }
+      const body = await readRequestBody(request);
+      if (!body || !["approve", "reject"].includes(body.action)) {
+        throw Object.assign(new Error("Choose approve or reject for this rider."), { status: 400 });
+      }
+      let riderId;
+      try {
+        riderId = decodeURIComponent(adminRiderMatch[1]);
+      } catch {
+        throw Object.assign(new Error("The rider ID is invalid."), { status: 400 });
+      }
+      const rider = await mutateStore("riders.json", [], riders => {
+        const selected = riders.find(item => item.id === riderId);
+        if (!selected) throw Object.assign(new Error("Rider not found."), { status: 404 });
+        if (selected.status !== "pending") {
+          throw Object.assign(new Error("Only pending rider applications can be reviewed."), { status: 409 });
+        }
+        selected.status = body.action === "approve" ? "active" : "rejected";
+        selected.reviewedAt = new Date().toISOString();
+        if (body.action === "approve") selected.approvedAt = selected.reviewedAt;
+        return { ...selected };
+      });
+      await notifyCustomer(`rider ${body.action}`, {
+        recipientEmail: rider.email,
+        recipientName: rider.name,
+        subject: body.action === "approve" ? "Your A&M Gadget rider application is approved" : "Update on your A&M Gadget rider application",
+        title: body.action === "approve" ? "Welcome to the rider team" : "Rider application update",
+        paragraphs: body.action === "approve"
+          ? ["Your rider application has been approved.", "Sign in to the rider portal to view assigned deliveries and manage your earnings."]
+          : ["Your rider application was not approved at this time.", "Contact the store if you have questions."]
+      });
+      jsonResponse(response, 200, { rider: { id: rider.id, status: rider.status } });
+      return;
+    }
+
+    if (route === "GET /api/admin/payout-requests") {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to view payout requests." });
+        return;
+      }
+      const [requests, riders] = await Promise.all([
+        readStore("payout_requests.json", []),
+        readStore("riders.json", [])
+      ]);
+      const ridersById = new Map(riders.map(rider => [rider.id, rider]));
+      jsonResponse(response, 200, requests.map(request => {
+        const rider = ridersById.get(request.riderId);
+        return {
+          ...request,
+          riderName: rider ? rider.name : "Rider account unavailable",
+          riderEmail: rider ? rider.email : "",
+          bankName: request.bankName || (rider && rider.bankName) || "",
+          accountName: request.accountName || (rider && rider.accountName) || "",
+          accountNumber: request.accountNumber || (rider && rider.accountNumber) || ""
+        };
+      }).sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)));
+      return;
+    }
+
+    const adminPayoutMatch = url.pathname.match(/^\/api\/admin\/payout-requests\/([^/]+)$/);
+    if (request.method === "PATCH" && adminPayoutMatch) {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to update payout requests." });
+        return;
+      }
+      const body = await readRequestBody(request);
+      if (!body || !["mark_paid", "reject"].includes(body.action)) {
+        throw Object.assign(new Error("Choose mark_paid or reject for this payout request."), { status: 400 });
+      }
+      let payoutId;
+      try {
+        payoutId = decodeURIComponent(adminPayoutMatch[1]);
+      } catch {
+        throw Object.assign(new Error("The payout request ID is invalid."), { status: 400 });
+      }
+      const payout = await mutateStore("payout_requests.json", [], requests => {
+        const selected = requests.find(item => item.id === payoutId);
+        if (!selected) throw Object.assign(new Error("Payout request not found."), { status: 404 });
+        if (selected.status !== "pending") {
+          throw Object.assign(new Error("Only pending payout requests can be reviewed."), { status: 409 });
+        }
+        selected.status = body.action === "mark_paid" ? "paid" : "rejected";
+        selected.reviewedAt = new Date().toISOString();
+        selected.reviewedBy = session.user.id;
+        return { ...selected };
+      });
+      const riders = await readStore("riders.json", []);
+      const rider = riders.find(item => item.id === payout.riderId);
+      if (rider) {
+        await notifyCustomer(`rider payout ${payout.status}`, {
+          recipientEmail: rider.email,
+          recipientName: rider.name,
+          subject: `Your rider payout request was ${payout.status === "paid" ? "paid" : "rejected"}`,
+          title: payout.status === "paid" ? "Payout marked as paid" : "Payout request update",
+          paragraphs: payout.status === "paid"
+            ? [`Your payout request for ${emailCurrency(payout.amount)} (${payout.weekKey}) has been marked as paid.`, "Thank you for delivering with A&M Gadget."]
+            : [`Your payout request for ${emailCurrency(payout.amount)} (${payout.weekKey}) was rejected.`, "Contact the store admin if you need more information."]
+        });
+      }
+      jsonResponse(response, 200, { payoutRequest: { id: payout.id, status: payout.status } });
       return;
     }
 
@@ -829,26 +1052,37 @@ function createServer(options = {}) {
       const body = await readRequestBody(request);
       const action = body && body.action;
       const transitions = {
-        confirm_payment: { from: "payment_reported", to: "confirmed" },
-        mark_shipping: { from: "confirmed", to: "shipping" },
-        mark_in_transit: { from: "shipping", to: "in_transit" },
-        mark_delivered: { from: "in_transit", to: "delivered" }
+        confirm_payment: { from: "payment_reported", to: "confirmed" }
       };
-      if (typeof action !== "string" || (!transitions[action] && action !== "cancel")) {
+      if (typeof action !== "string" || (!transitions[action] && !["mark_shipping", "cancel"].includes(action))) {
         throw Object.assign(new Error("Choose a valid order action."), { status: 400 });
       }
       const orderId = decodeURIComponent(adminOrderActionMatch[1]);
+      let assignedRider = null;
+      if (action === "mark_shipping") {
+        const riderId = typeof body.riderId === "string" ? body.riderId : "";
+        const riders = await readStore("riders.json", []);
+        assignedRider = riders.find(rider => rider.id === riderId && rider.status === "active");
+        if (!assignedRider) {
+          throw Object.assign(new Error("Select an approved rider before assigning this delivery."), { status: 400 });
+        }
+      }
       const order = await mutateStore("orders.json", [], orders => {
         const selectedOrder = orders.find(item => item.id === orderId);
         if (!selectedOrder) throw Object.assign(new Error("Order not found."), { status: 404 });
         const currentStatus = selectedOrder.status || "pending_payment";
         const transition = transitions[action];
+        const assigningRider = action === "mark_shipping" && currentStatus === "confirmed";
         const canCancel = action === "cancel" &&
           ["pending_payment", "payment_reported", "confirmed", "shipping", "in_transit"].includes(currentStatus);
-        if (!canCancel && (!transition || currentStatus !== transition.from)) {
+        if (!canCancel && !assigningRider && (!transition || currentStatus !== transition.from)) {
           throw Object.assign(new Error("That action is not available for the current order status."), { status: 409 });
         }
-        selectedOrder.status = canCancel ? "cancelled" : transition.to;
+        selectedOrder.status = canCancel ? "cancelled" : assigningRider ? "shipping" : transition.to;
+        if (assigningRider) {
+          selectedOrder.riderId = assignedRider.id;
+          selectedOrder.riderAssignedAt = new Date().toISOString();
+        }
         if (action === "confirm_payment") selectedOrder.paymentStatus = "Confirmed by admin";
         if (canCancel) {
           selectedOrder.paymentStatus = selectedOrder.paymentStatus === "Confirmed by admin"
@@ -859,7 +1093,18 @@ function createServer(options = {}) {
         return selectedOrder;
       });
       await notifyOrderStatusChanged(order);
-      jsonResponse(response, 200, { order });
+      if (assignedRider) await notifyRiderAssignment(order, assignedRider);
+      jsonResponse(response, 200, {
+        order: {
+          id: order.id,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          updatedAt: order.updatedAt,
+          riderId: order.riderId || null,
+          riderName: assignedRider ? assignedRider.name : "",
+          riderEmail: assignedRider ? assignedRider.email : ""
+        }
+      });
       return;
     }
 
@@ -869,15 +1114,18 @@ function createServer(options = {}) {
         jsonResponse(response, 403, { error: "Sign in as the store admin to view orders." });
         return;
       }
-      const [orders, users, products] = await Promise.all([
+      const [orders, users, products, riders] = await Promise.all([
         readStore("orders.json", []),
         readStore("users.json", []),
-        readStore("products.json", defaultProducts)
+        readStore("products.json", defaultProducts),
+        readStore("riders.json", [])
       ]);
       const usersById = new Map(users.map(user => [user.id, user]));
       const productsById = new Map(products.map(product => [product.id, product]));
+      const ridersById = new Map(riders.map(rider => [rider.id, rider]));
       const adminOrders = orders.map(order => {
         const customer = usersById.get(order.userId);
+        const rider = ridersById.get(order.riderId);
         return {
           id: order.id,
           customerName: order.recipientName || (customer ? customer.name : "Customer account unavailable"),
@@ -886,6 +1134,10 @@ function createServer(options = {}) {
           createdAt: order.createdAt,
           updatedAt: order.updatedAt || null,
           status: order.status || "pending_payment",
+          riderId: order.riderId || null,
+          riderName: rider ? rider.name : "",
+          riderEmail: rider ? rider.email : "",
+          riderCommission: order.riderCommission ?? null,
           paymentStatus: order.paymentStatus || "Awaiting payment",
           paymentSubmittedAt: order.paymentSubmittedAt || null,
           shippingAddress: order.shippingAddress,
@@ -962,7 +1214,19 @@ function createServer(options = {}) {
         return;
       }
       const orders = await readStore("orders.json", []);
-      jsonResponse(response, 200, orders.filter(order => order.userId === session.user.id));
+      const customerOrders = orders.filter(order => order.userId === session.user.id).map(order => {
+        const {
+          deliveryCodeHash,
+          deliveryCodeExpiresAt,
+          deliveryCodeRequestedAt,
+          deliveryCodeAttempts,
+          riderId,
+          riderCommission,
+          ...customerOrder
+        } = order;
+        return customerOrder;
+      });
+      jsonResponse(response, 200, customerOrders);
       return;
     }
 
@@ -1082,7 +1346,9 @@ function createServer(options = {}) {
       const salt = crypto.randomBytes(16);
       const passwordHash = (await scrypt(password, salt, 64)).toString("hex");
       const user = await mutateStore("users.json", [], async users => {
-        if (users.some(existing => existing.email === email)) {
+        const riders = await readStore("riders.json", []);
+        if (users.some(existing => existing.email === email) ||
+            riders.some(existing => existing.email === email) || email === adminEmail) {
           throw Object.assign(new Error("An account with that email already exists."), { status: 409 });
         }
         const id = crypto.randomUUID();
@@ -1143,6 +1409,396 @@ function createServer(options = {}) {
       const user = { ...existing, role: "customer" };
       await createSession(response, request, user);
       jsonResponse(response, 200, { user: userDetails({ user }) });
+      return;
+    }
+
+    if (route === "POST /api/rider/register") {
+      const body = await readRequestBody(request);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        throw Object.assign(new Error("Rider registration details must be sent as an object."), { status: 400 });
+      }
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+      const password = typeof body.password === "string" ? body.password : "";
+      const vehicleType = typeof body.vehicleType === "string" ? body.vehicleType.trim() : "";
+      const licensePlate = typeof body.licensePlate === "string" ? body.licensePlate.trim().toUpperCase() : "";
+      const bankName = typeof body.bankName === "string" ? body.bankName.trim() : "";
+      const accountName = typeof body.accountName === "string" ? body.accountName.trim() : "";
+      const accountNumber = typeof body.accountNumber === "string" ? body.accountNumber.replace(/\s/g, "") : "";
+      const phoneDigits = phone.replace(/\D/g, "");
+      if (!name || name.length > 80) throw Object.assign(new Error("Enter your name (up to 80 characters)."), { status: 400 });
+      if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw Object.assign(new Error("Enter a valid email address."), { status: 400 });
+      }
+      if (!/^\+?[\d\s()-]+$/.test(phone) || phoneDigits.length < 7 || phoneDigits.length > 15) {
+        throw Object.assign(new Error("Enter a valid phone number with 7 to 15 digits."), { status: 400 });
+      }
+      if (password.length < 8 || password.length > 128) {
+        throw Object.assign(new Error("Your password must be between 8 and 128 characters."), { status: 400 });
+      }
+      if (!["Motorcycle", "Car", "Bicycle", "Other"].includes(vehicleType)) {
+        throw Object.assign(new Error("Choose a supported vehicle type."), { status: 400 });
+      }
+      if (licensePlate.length > 20) throw Object.assign(new Error("Vehicle registration must be 20 characters or fewer."), { status: 400 });
+      if (!bankName || bankName.length > 80 || !accountName || accountName.length > 80 ||
+          !/^\d{10}$/.test(accountNumber)) {
+        throw Object.assign(new Error("Enter a bank name, account name, and valid 10-digit account number for weekly payouts."), { status: 400 });
+      }
+      const salt = crypto.randomBytes(16);
+      const passwordHash = (await scrypt(password, salt, 64)).toString("hex");
+      const rider = await mutateStore("riders.json", [], async riders => {
+        const users = await readStore("users.json", []);
+        if (email === adminEmail || users.some(user => user.email === email) ||
+            riders.some(existing => existing.email === email)) {
+          throw Object.assign(new Error("An account with that email already exists."), { status: 409 });
+        }
+        const created = {
+          id: crypto.randomUUID(),
+          name,
+          email,
+          phone,
+          vehicleType,
+          licensePlate,
+          bankName,
+          accountName,
+          accountNumber,
+          status: "pending",
+          createdAt: new Date().toISOString(),
+          salt: salt.toString("hex"),
+          passwordHash
+        };
+        riders.push(created);
+        return { ...created };
+      });
+      await Promise.all([
+        notifyCustomer("rider application confirmation", {
+          recipientEmail: rider.email,
+          recipientName: rider.name,
+          subject: "We received your A&M Gadget rider application",
+          title: "Application received",
+          paragraphs: [
+            "Thank you for applying to ride with A&M Gadget.",
+            "Your application is waiting for admin approval. We will email you when it has been reviewed."
+          ]
+        }),
+        adminEmail ? notifyCustomer("new rider application alert", {
+          recipientEmail: adminEmail,
+          recipientName: "Store admin",
+          subject: `New rider application from ${rider.name}`,
+          title: "Rider application needs review",
+          paragraphs: [
+            `${rider.name} (${rider.email}) has applied to become a delivery rider.`,
+            `Phone: ${rider.phone}. Vehicle: ${rider.vehicleType}${rider.licensePlate ? ` (${rider.licensePlate})` : ""}.`,
+            "Sign in to the admin dashboard and review the Riders section."
+          ]
+        }) : Promise.resolve()
+      ]);
+      jsonResponse(response, 201, { status: rider.status, message: "Application received. Sign in after the admin approves your rider account." });
+      return;
+    }
+
+    if (route === "POST /api/rider/login") {
+      const body = await readRequestBody(request);
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const password = typeof body.password === "string" ? body.password : "";
+      const riders = await readStore("riders.json", []);
+      const existing = riders.find(rider => rider.email === email);
+      const candidate = existing
+        ? (await scrypt(password, Buffer.from(existing.salt, "hex"), 64)).toString("hex")
+        : "";
+      if (!existing || !safeEqual(candidate, existing.passwordHash)) {
+        jsonResponse(response, 401, { error: "Email or password is incorrect." });
+        return;
+      }
+      if (existing.status !== "active") {
+        jsonResponse(response, 403, {
+          error: existing.status === "rejected"
+            ? "This rider application was not approved. Contact the store if you have questions."
+            : "Your rider application is waiting for admin approval."
+        });
+        return;
+      }
+      const user = { ...existing, role: "rider" };
+      await createSession(response, request, user);
+      jsonResponse(response, 200, { user: userDetails({ user }) });
+      return;
+    }
+
+    if (route === "GET /api/rider/dashboard") {
+      const session = getSession(request);
+      if (!session || session.user.role !== "rider") {
+        jsonResponse(response, 403, { error: "Sign in to your approved rider account to view deliveries." });
+        return;
+      }
+      const [riders, orders, payouts] = await Promise.all([
+        readStore("riders.json", []),
+        readStore("orders.json", []),
+        readStore("payout_requests.json", [])
+      ]);
+      const rider = riders.find(item => item.id === session.user.id && item.status === "active");
+      if (!rider) {
+        jsonResponse(response, 403, { error: "This rider account is not active." });
+        return;
+      }
+      const assignedOrders = orders.filter(order => order.riderId === rider.id).map(order => {
+        const commission = order.status === "delivered"
+          ? Math.round((Number(order.deliveryFee) || 0) * 0.03 * 100) / 100
+          : 0;
+        return {
+          id: order.id,
+          status: order.status || "pending_payment",
+          createdAt: order.createdAt,
+          recipientName: order.recipientName || "Customer",
+          recipientPhone: order.recipientPhone || "",
+          shippingAddress: order.shippingAddress || "",
+          items: Array.isArray(order.items) ? order.items.map(item => ({
+            name: item.name || "Gadget",
+            quantity: Number(item.quantity) || 1
+          })) : [],
+          deliveryFee: Number(order.deliveryFee) || 0,
+          riderCommission: commission,
+          deliveredAt: order.deliveredAt || null
+        };
+      }).sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+      const earned = assignedOrders.reduce((sum, order) => sum + order.riderCommission, 0);
+      const riderPayouts = payouts.filter(payout => payout.riderId === rider.id);
+      const committed = riderPayouts
+        .filter(payout => ["pending", "paid"].includes(payout.status))
+        .reduce((sum, payout) => sum + Number(payout.amount || 0), 0);
+      const availableBalance = Math.max(0, Math.round((earned - committed) * 100) / 100);
+      const weekKey = isoWeekKey();
+      const currentWeekRequest = riderPayouts.find(payout => payout.weekKey === weekKey && payout.status !== "rejected");
+      jsonResponse(response, 200, {
+        rider: { name: rider.name, email: rider.email, phone: rider.phone, vehicleType: rider.vehicleType },
+        orders: assignedOrders,
+        payouts: riderPayouts.map(payout => ({
+          id: payout.id,
+          amount: Number(payout.amount) || 0,
+          status: payout.status,
+          weekKey: payout.weekKey,
+          createdAt: payout.createdAt,
+          reviewedAt: payout.reviewedAt || null
+        })).sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
+        earnings: {
+          earned: Math.round(earned * 100) / 100,
+          availableBalance,
+          weekKey,
+          canRequestPayout: availableBalance > 0 && !currentWeekRequest,
+          accountLastFour: rider.accountNumber.slice(-4)
+        }
+      });
+      return;
+    }
+
+    const riderDeliveryMatch = url.pathname.match(/^\/api\/rider\/orders\/([^/]+)\/(start|request-code|verify-code)$/);
+    if (riderDeliveryMatch && ["PATCH", "POST"].includes(request.method)) {
+      const session = getSession(request);
+      if (!session || session.user.role !== "rider") {
+        jsonResponse(response, 403, { error: "Sign in to your approved rider account to update deliveries." });
+        return;
+      }
+      let orderId;
+      try {
+        orderId = decodeURIComponent(riderDeliveryMatch[1]);
+      } catch {
+        throw Object.assign(new Error("The order ID is invalid."), { status: 400 });
+      }
+      const action = riderDeliveryMatch[2];
+      if (action === "start") {
+        const order = await mutateStore("orders.json", [], orders => {
+          const selected = orders.find(item => item.id === orderId && item.riderId === session.user.id);
+          if (!selected) throw Object.assign(new Error("Assigned order not found."), { status: 404 });
+          if (selected.status !== "shipping") {
+            throw Object.assign(new Error("Only assigned deliveries can be started."), { status: 409 });
+          }
+          selected.status = "in_transit";
+          selected.deliveryStartedAt = new Date().toISOString();
+          selected.updatedAt = selected.deliveryStartedAt;
+          return selected;
+        });
+        await notifyOrderStatusChanged(order);
+        jsonResponse(response, 200, { order: { id: order.id, status: order.status } });
+        return;
+      }
+
+      if (action === "request-code") {
+        if (!deliveryOtpSecret || deliveryOtpSecret.length < 32) {
+          jsonResponse(response, 503, { error: "Delivery verification is not configured. Set a DELIVERY_OTP_SECRET of at least 32 characters." });
+          return;
+        }
+        const [customerRecords, orderRecords] = await Promise.all([
+          readStore("users.json", []),
+          readStore("orders.json", [])
+        ]);
+        const selected = orderRecords.find(item => item.id === orderId && item.riderId === session.user.id);
+        if (!selected) {
+          jsonResponse(response, 404, { error: "Assigned order not found." });
+          return;
+        }
+        if (selected.status !== "in_transit") {
+          jsonResponse(response, 409, { error: "Start this delivery before requesting its confirmation code." });
+          return;
+        }
+        const customer = customerRecords.find(item => item.id === selected.userId);
+        if (!customer || !customer.email || !selected.recipientPhone) {
+          jsonResponse(response, 409, { error: "This order is missing the customer's email or delivery phone number." });
+          return;
+        }
+        normalizeSmsPhone(selected.recipientPhone);
+        const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+        const codeHash = crypto.createHmac("sha256", deliveryOtpSecret).update(`${orderId}:${code}`).digest("hex");
+        const codeRequest = await mutateStore("orders.json", [], orders => {
+          const order = orders.find(item => item.id === orderId && item.riderId === session.user.id);
+          if (!order || order.status !== "in_transit") {
+            throw Object.assign(new Error("This delivery is no longer waiting for confirmation."), { status: 409 });
+          }
+          if (order.deliveryCodeRequestedAt && Date.now() - Date.parse(order.deliveryCodeRequestedAt) < 60000) {
+            return { retryAfter: true };
+          }
+          order.deliveryCodeHash = codeHash;
+          order.deliveryCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+          order.deliveryCodeRequestedAt = new Date().toISOString();
+          order.deliveryCodeAttempts = 0;
+          return { retryAfter: false };
+        });
+        if (codeRequest.retryAfter) {
+          jsonResponse(response, 429, { error: "A delivery code was sent recently. Wait one minute before requesting another." });
+          return;
+        }
+        const [emailResult, smsResult] = await Promise.allSettled([
+          sendBrevoEmail({
+            recipientEmail: customer.email,
+            recipientName: selected.recipientName || customer.name,
+            subject: `Delivery confirmation code for order ${orderId.slice(0, 8)}`,
+            title: "Confirm your delivery",
+            paragraphs: [
+              `Your delivery confirmation code is ${code}.`,
+              "Give this code to your rider only when your order has arrived. It expires in 10 minutes."
+            ]
+          }),
+          sendBrevoSms({
+            recipientPhone: selected.recipientPhone,
+            content: `A&M Gadget delivery code: ${code}. Share it with your rider only after receiving your order. Expires in 10 minutes.`
+          })
+        ]);
+        if (emailResult.status === "rejected" || smsResult.status === "rejected") {
+          if (emailResult.status === "rejected") console.error("Could not send the delivery code email:", emailResult.reason.message);
+          if (smsResult.status === "rejected") console.error("Could not send the delivery code SMS:", smsResult.reason.message);
+          jsonResponse(response, 503, { error: "We could not deliver the code by both email and SMS. Wait one minute, check the contact details, and try again." });
+          return;
+        }
+        jsonResponse(response, 200, { message: "The confirmation code was sent to the customer's email and phone." });
+        return;
+      }
+
+      const body = await readRequestBody(request);
+      const code = typeof body.code === "string" ? body.code.trim() : "";
+      if (!/^\d{6}$/.test(code)) {
+        throw Object.assign(new Error("Enter the customer's 6-digit confirmation code."), { status: 400 });
+      }
+      if (!deliveryOtpSecret || deliveryOtpSecret.length < 32) {
+        jsonResponse(response, 503, { error: "Delivery verification is not configured. Set a DELIVERY_OTP_SECRET of at least 32 characters." });
+        return;
+      }
+      const verified = await mutateStore("orders.json", [], orders => {
+        const order = orders.find(item => item.id === orderId && item.riderId === session.user.id);
+        if (!order) throw Object.assign(new Error("Assigned order not found."), { status: 404 });
+        if (order.status !== "in_transit") {
+          throw Object.assign(new Error("This delivery is not waiting for a confirmation code."), { status: 409 });
+        }
+        if (!order.deliveryCodeHash || !order.deliveryCodeExpiresAt) {
+          throw Object.assign(new Error("Request a new confirmation code before completing this delivery."), { status: 409 });
+        }
+        if (Date.parse(order.deliveryCodeExpiresAt) <= Date.now()) {
+          order.deliveryCodeHash = null;
+          throw Object.assign(new Error("The confirmation code has expired. Request a new code."), { status: 410 });
+        }
+        if (Number(order.deliveryCodeAttempts) >= 5) {
+          throw Object.assign(new Error("Too many incorrect attempts. Request a new confirmation code."), { status: 429 });
+        }
+        const submittedHash = crypto.createHmac("sha256", deliveryOtpSecret).update(`${orderId}:${code}`).digest("hex");
+        if (!safeEqual(submittedHash, order.deliveryCodeHash)) {
+          order.deliveryCodeAttempts = (Number(order.deliveryCodeAttempts) || 0) + 1;
+          return { error: "That confirmation code is incorrect.", attemptsRemaining: Math.max(0, 5 - order.deliveryCodeAttempts) };
+        }
+        order.status = "delivered";
+        order.deliveredAt = new Date().toISOString();
+        order.updatedAt = order.deliveredAt;
+        order.riderCommission = Math.round((Number(order.deliveryFee) || 0) * 0.03 * 100) / 100;
+        order.deliveryCodeHash = null;
+        order.deliveryCodeExpiresAt = null;
+        return { order };
+      });
+      if (verified.error) {
+        jsonResponse(response, 400, verified);
+        return;
+      }
+      await notifyOrderStatusChanged(verified.order);
+      jsonResponse(response, 200, {
+        order: {
+          id: verified.order.id,
+          status: verified.order.status,
+          riderCommission: verified.order.riderCommission
+        }
+      });
+      return;
+    }
+
+    if (request.method === "POST" && route === "POST /api/rider/payout-requests") {
+      const session = getSession(request);
+      if (!session || session.user.role !== "rider") {
+        jsonResponse(response, 403, { error: "Sign in to your approved rider account to request a payout." });
+        return;
+      }
+      const payout = await mutateStore("payout_requests.json", [], async requests => {
+        const [riders, orders] = await Promise.all([
+          readStore("riders.json", []),
+          readStore("orders.json", [])
+        ]);
+        const rider = riders.find(item => item.id === session.user.id && item.status === "active");
+        if (!rider) throw Object.assign(new Error("This rider account is not active."), { status: 403 });
+        const earned = orders
+          .filter(order => order.riderId === rider.id && order.status === "delivered")
+          .reduce((sum, order) => sum + Math.round((Number(order.deliveryFee) || 0) * 0.03 * 100) / 100, 0);
+        const committed = requests
+          .filter(item => item.riderId === rider.id && ["pending", "paid"].includes(item.status))
+          .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+        const amount = Math.max(0, Math.round((earned - committed) * 100) / 100);
+        if (amount <= 0) throw Object.assign(new Error("There are no available delivery earnings to request."), { status: 409 });
+        const weekKey = isoWeekKey();
+        if (requests.some(item => item.riderId === rider.id && item.weekKey === weekKey && item.status !== "rejected")) {
+          throw Object.assign(new Error("You have already requested a payout this week."), { status: 409 });
+        }
+        const created = {
+          id: crypto.randomUUID(),
+          riderId: rider.id,
+          amount,
+          weekKey,
+          status: "pending",
+          bankName: rider.bankName,
+          accountName: rider.accountName,
+          accountNumber: rider.accountNumber,
+          createdAt: new Date().toISOString()
+        };
+        requests.push(created);
+        return created;
+      });
+      if (adminEmail) {
+        await notifyCustomer("new rider payout request", {
+          recipientEmail: adminEmail,
+          recipientName: "Store admin",
+          subject: `Weekly rider payout request: ${emailCurrency(payout.amount)}`,
+          title: "Rider payout request",
+          paragraphs: [
+            `A rider has requested ${emailCurrency(payout.amount)} for ${payout.weekKey}.`,
+            "Sign in to the admin dashboard and review the Payouts section."
+          ]
+        });
+      }
+      jsonResponse(response, 201, {
+        payoutRequest: { id: payout.id, amount: payout.amount, status: payout.status, weekKey: payout.weekKey }
+      });
       return;
     }
 

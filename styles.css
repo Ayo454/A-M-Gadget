@@ -420,6 +420,58 @@ footer p { color:#777783; font-size:12px; }
 .site-form .button { margin-top:4px; justify-self:start; }
 .form-help { margin:-10px 0 0; color:var(--muted); font-size:11px; }
 .avatar-preview, .account-avatar { width:88px; height:88px; border-radius:50%; object-fit:cover; background:#eeece6; }
+.rider-main { min-height:calc(100vh - 190px); padding:58px clamp(16px,5vw,72px); background:#f7f6f2; }
+.rider-status { max-width:1100px; margin:0 auto 14px; color:#52632c; font-size:13px; font-weight:700; }
+.rider-status:empty { display:none; }
+.rider-status.error { color:#a83232; }
+.rider-auth { width:min(540px,100%); margin:0 auto; padding:32px; border:1px solid #e6e3db; border-radius:8px; background:#fff; box-shadow:0 12px 40px rgba(17,17,24,.06); }
+.rider-auth h1, .rider-page-heading h1 { margin:0; font:700 clamp(27px,4vw,36px) "Space Grotesk",sans-serif; }
+.rider-auth .form-intro { margin:10px 0 20px; color:#777783; font-size:13px; line-height:1.6; }
+.rider-auth .form-tabs { margin-bottom:18px; }
+.rider-register-form { gap:13px; }
+.rider-dashboard { max-width:1280px; margin:0 auto; }
+.rider-dashboard[hidden], .rider-panel[hidden] { display:none; }
+.rider-workspace { display:grid; grid-template-columns:220px minmax(0,1fr); min-height:620px; border:1px solid #e4e2db; border-radius:8px; overflow:hidden; background:white; box-shadow:0 12px 40px rgba(17,17,24,.06); }
+.rider-sidebar { display:flex; flex-direction:column; padding:24px 14px; background:#111118; color:#fff; }
+.rider-sidebar > p { margin:0 10px 18px; color:#b5bb9e; font-size:9px; font-weight:800; letter-spacing:.12em; }
+.rider-sidebar nav { display:grid; gap:5px; }
+.rider-sidebar nav button, .rider-logout { min-height:40px; padding:0 11px; border:0; border-radius:4px; background:transparent; color:#c9c9cf; text-align:left; font-size:11px; font-weight:700; }
+.rider-sidebar nav button:hover, .rider-sidebar nav button.active { background:#27272f; color:var(--lime); }
+.rider-logout { margin-top:auto; border-top:1px solid #303038; border-radius:0; color:#e7adb0; }
+.rider-content { min-width:0; padding:clamp(20px,4vw,38px); }
+.rider-page-heading { margin-bottom:22px; }
+.rider-page-heading .eyebrow { margin-bottom:10px; }
+.rider-page-heading > p:last-child { margin:8px 0 0; color:#777783; font-size:12px; line-height:1.6; }
+.rider-stat-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.rider-stat-grid article, .rider-earnings-card > div { display:grid; gap:8px; padding:16px; border:1px solid #e8e6df; border-radius:5px; background:#fbfaf7; }
+.rider-stat-grid span, .rider-earnings-card span { color:#81818a; font-size:10px; font-weight:700; }
+.rider-stat-grid strong, .rider-earnings-card strong { color:#17171e; font:700 21px "Space Grotesk",sans-serif; }
+.rider-panel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:26px 0 12px; }
+.rider-panel-heading h2 { margin:0; font:700 16px "Space Grotesk",sans-serif; }
+.rider-panel-heading button { border:0; background:transparent; color:#58652e; font-size:10px; font-weight:800; }
+.rider-order-list, .rider-payout-list { display:grid; gap:12px; }
+.rider-order-card, .rider-payout-item { padding:16px; border:1px solid #e8e6df; border-radius:5px; background:#fff; }
+.rider-order-card-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+.rider-order-card h3 { margin:0; color:#22222a; font-size:13px; }
+.rider-order-card p { margin:7px 0 0; color:#777783; font-size:10px; line-height:1.6; overflow-wrap:anywhere; }
+.rider-order-card .rider-order-meta { color:#4e4e58; font-weight:700; }
+.rider-order-status { padding:4px 8px; border-radius:20px; background:#f1f0eb; color:#66666f; font-size:8px; font-weight:800; white-space:nowrap; }
+.rider-order-status.delivered { background:#eff2e4; color:#4e562d; }
+.rider-order-card .button { min-height:35px; margin-top:12px; padding:0 12px; font-size:10px; }
+.rider-order-card .button:disabled { opacity:.55; cursor:not-allowed; }
+.rider-code-form { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.rider-code-form input { width:155px; min-height:36px; padding:7px 9px; border:1px solid #dcdad3; border-radius:4px; font:600 13px "Manrope",sans-serif; letter-spacing:.12em; }
+.rider-code-form button { min-height:36px; padding:0 10px; border:0; border-radius:4px; background:#111118; color:white; font-size:10px; font-weight:800; }
+.rider-order-feedback { margin:9px 0 0; color:#52632c; font-size:10px; font-weight:700; }
+.rider-order-feedback.error { color:#a83232; }
+.rider-earnings-card { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.rider-payout-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; padding:14px; border-radius:5px; background:#f7f6f2; }
+.rider-payout-actions p { margin:0; color:#72727b; font-size:10px; line-height:1.5; }
+.rider-payout-actions .button { min-height:36px; padding:0 12px; font-size:10px; white-space:nowrap; }
+.rider-payout-item { display:flex; justify-content:space-between; gap:12px; color:#62626c; font-size:10px; }
+.rider-payout-item strong { color:#22222a; }
+.rider-empty { padding:25px; border:1px dashed #dedbd2; border-radius:5px; color:#82828b; text-align:center; font-size:11px; }
+.announcement-message-link { color:inherit; font-weight:800; text-decoration:underline; text-underline-offset:2px; }
 .account-avatar { margin-bottom:16px; }
 .signed-in-panel p span { overflow-wrap:anywhere; }
 .form-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
@@ -662,6 +714,7 @@ footer p { color:#777783; font-size:12px; }
 .admin-order-detail-actions .admin-order-action.primary { border-color:#465869; background:#465869; color:#fff; }
 .admin-order-detail-actions .admin-order-action.danger { border-color:#e8bebe; background:#fff4f4; color:#a83232; }
 .admin-order-detail-actions .admin-order-action:disabled { opacity:.55; cursor:not-allowed; }
+.admin-order-detail-actions select { min-width:190px; min-height:34px; padding:0 9px; border:1px solid #d6dfe6; border-radius:3px; background:white; color:#465869; font-size:10px; }
 .admin-order-detail-message { margin:12px 0 0; color:#566473; font-size:11px; }
 .admin-empty-row { height:100px!important; color:#8593a0!important; text-align:center; }
 .admin-record-table { width:100%; min-width:850px; border-collapse:collapse; text-align:left; }
@@ -679,6 +732,11 @@ footer p { color:#777783; font-size:12px; }
 .admin-nowrap { white-space:nowrap; }
 .admin-record-tag { display:inline-flex; padding:4px 7px; border-radius:20px; background:#f1f0eb; color:#66666f; font-size:8px; font-weight:700; white-space:nowrap; }
 .admin-record-tag.available { background:#eff2e4; color:#4e562d; }
+.admin-record-actions { display:grid; gap:5px; min-width:78px; }
+.admin-record-actions button { min-height:27px; padding:0 8px; font-size:8px; white-space:nowrap; }
+.admin-record-actions .admin-approve-button { border-color:#dbe8ca; background:#f3f8e9; color:#52632c; }
+.admin-record-actions .admin-reject-button { border-color:#e8bebe; background:#fff4f4; color:#a83232; }
+.admin-record-actions button:disabled { opacity:.55; cursor:not-allowed; }
 .admin-order-id { color:#41414a; font-size:9px; }
 .admin-order-items { display:block; min-width:145px; max-width:240px; color:#63636d; white-space:normal; line-height:1.5; }
 .admin-orders-table { min-width:1080px; }
@@ -703,7 +761,7 @@ footer p { color:#777783; font-size:12px; }
   .admin-workspace { grid-template-columns:1fr; }
   .admin-sidebar { padding:10px 14px; border-right:0; border-bottom:1px solid #dfe5eb; }
   .admin-sidebar-heading, .admin-sidebar-bottom { display:none; }
-  .admin-side-nav { grid-template-columns:repeat(5,max-content); gap:5px; }
+  .admin-side-nav { grid-template-columns:repeat(7,max-content); gap:5px; }
   .admin-side-nav button, .admin-side-nav a { padding:0 13px; }
   .admin-stats-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
@@ -720,7 +778,7 @@ footer p { color:#777783; font-size:12px; }
   .admin-user { gap:6px; }
   .admin-user > button { padding:6px 7px; font-size:9px; }
   .admin-workspace { min-height:calc(100vh - 58px); }
-  .admin-side-nav { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .admin-side-nav { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .admin-side-nav button, .admin-side-nav a { justify-content:center; gap:6px; padding:0 5px; font-size:9px; }
   .admin-content { padding:0 12px 30px; }
   .admin-content-topline { min-height:40px; font-size:8px; }
@@ -749,4 +807,22 @@ footer p { color:#777783; font-size:12px; }
   .admin-product-detail-facts { gap:10px; }
   .admin-product-detail-actions { padding:12px; }
   .admin-login-card { margin:7vh auto; padding:25px 20px; }
+}
+
+@media (max-width: 900px) {
+  .rider-workspace { grid-template-columns:1fr; }
+  .rider-sidebar { padding:12px; }
+  .rider-sidebar > p { margin:0 6px 8px; }
+  .rider-sidebar nav { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .rider-sidebar nav button { text-align:center; }
+  .rider-logout { margin-top:8px; border-top:0; text-align:center; }
+}
+
+@media (max-width: 600px) {
+  .rider-main { padding:28px 12px; }
+  .rider-auth { padding:23px 17px; }
+  .rider-content { padding:20px 14px; }
+  .rider-stat-grid, .rider-earnings-card { grid-template-columns:1fr; }
+  .rider-payout-actions { align-items:stretch; flex-direction:column; }
+  .rider-payout-actions .button { width:100%; }
 }
