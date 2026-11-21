@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0d0d12">
+  <title>Store Admin | A&amp;M Gadget</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="admin-body">
+  <header class="admin-topbar">
+    <a class="admin-brand" href="index.html" aria-label="A&amp;M Gadget storefront">
+      <span class="admin-brand-mark">A&amp;M</span>
+      <span>A&amp;M Gadget</span>
+      <span class="admin-brand-tag">STORE ADMIN</span>
+    </a>
+    <div class="admin-topbar-context"><span></span> Private management portal</div>
+    <div class="admin-user" id="adminUserBar" hidden>
+      <span class="admin-user-avatar">AM</span>
+      <span class="admin-user-name"><strong>Store admin</strong><small>Manager</small></span>
+      <button id="adminLogout" type="button">Sign out</button>
+    </div>
+  </header>
+
+  <main class="admin-entry">
+    <p class="admin-status" id="adminStatus" role="status" aria-live="polite" hidden></p>
+
+    <section class="admin-login-card" id="adminLoginPanel">
+      <p class="admin-kicker">PRIVATE STORE ACCESS</p>
+      <h1>Admin sign in</h1>
+      <p>Sign in with the store admin credentials to manage the gadget catalog.</p>
+      <form id="adminLoginForm" class="site-form">
+        <label>Admin email<input name="email" type="email" autocomplete="username" required maxlength="254"></label>
+        <label>Admin password<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label>
+        <button class="button button-primary" type="submit">Sign in to admin <span>→</span></button>
+      </form>
+      <a class="admin-login-store-link" href="index.html">← Return to storefront</a>
+    </section>
+
+    <section class="admin-workspace" id="productManager" hidden>
+      <aside class="admin-sidebar">
+        <p class="admin-sidebar-heading">STORE MANAGEMENT</p>
+        <nav class="admin-side-nav" aria-label="Admin navigation">
+          <button type="button" class="active" data-admin-view="overview"><span>▦</span> Dashboard</button>
+          <button type="button" data-admin-view="products"><span>▣</span> Products</button>
+          <button type="button" data-admin-view="users"><span>♙</span> Users <small class="admin-nav-count" id="adminUserCount">0</small></button>
+          <button type="button" data-admin-view="orders"><span>▤</span> Orders <small class="admin-nav-count" id="adminOrderCount">0</small></button>
+          <a href="index.html"><span>↗</span> View storefront</a>
+        </nav>
+        <div class="admin-sidebar-bottom">
+          <span class="admin-sidebar-status"></span>
+          <div><strong>Store is online</strong><small>Catalog management</small></div>
+        </div>
+      </aside>
+
+      <div class="admin-content">
+        <div class="admin-content-topline">
+          <span>A&amp;M Gadget</span>
+          <span class="admin-breadcrumb">Store management <b>/</b> <strong id="adminPageTitle">Dashboard</strong></span>
+        </div>
+
+        <section class="admin-view" id="adminOverview" data-admin-panel="overview">
+          <div class="admin-page-heading">
+            <div>
+              <p class="admin-kicker">STORE OVERVIEW</p>
+              <h1>Dashboard</h1>
+              <p>Keep an eye on your product catalog and current stock.</p>
+            </div>
+            <button type="button" class="admin-primary-button" data-open-product-form><span>＋</span> Add product</button>
+          </div>
+
+          <div class="admin-stats-grid">
+            <article class="admin-stat-card"><span class="admin-stat-icon">▣</span><p>Total products</p><strong id="totalProductCount">—</strong><small>Products in your catalog</small></article>
+            <article class="admin-stat-card"><span class="admin-stat-icon">♙</span><p>Users</p><strong id="totalUserCount">—</strong><small>Registered customers</small></article>
+            <article class="admin-stat-card"><span class="admin-stat-icon">▤</span><p>Orders</p><strong id="totalOrderCount">—</strong><small>Submitted order requests</small></article>
+            <article class="admin-stat-card"><span class="admin-stat-icon">▤</span><p>Units in stock</p><strong id="totalStockCount">—</strong><small>Across all products</small></article>
+            <article class="admin-stat-card"><span class="admin-stat-icon admin-stat-warning">!</span><p>Low stock</p><strong id="lowStockCount">—</strong><small>Above zero, five or fewer units</small></article>
+            <article class="admin-stat-card"><span class="admin-stat-icon">◫</span><p>Categories</p><strong id="categoryCount">—</strong><small>Product categories</small></article>
+          </div>
+
+          <section class="admin-panel admin-recent-panel">
+            <div class="admin-panel-heading">
+              <div><h2>Catalog snapshot</h2><p>Products in your catalog</p></div>
+              <button type="button" class="admin-text-button" data-admin-view="products">Manage products <span>→</span></button>
+            </div>
+            <div id="recentProductList" class="admin-recent-list"></div>
+          </section>
+        </section>
+
+        <section class="admin-view" id="adminUsersView" data-admin-panel="users" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <p class="admin-kicker">CUSTOMER ACCOUNTS</p>
+              <h1>Users</h1>
+              <p>Review registered customer contact and delivery information.</p>
+            </div>
+          </div>
+          <section class="admin-panel">
+            <div class="admin-panel-heading">
+              <div><h2>Registered users</h2><p id="userCountLabel">Loading users...</p></div>
+            </div>
+            <div class="admin-table-toolbar">
+              <label class="admin-search"><span aria-hidden="true">⌕</span><input id="userSearch" type="search" placeholder="Search users..." aria-label="Search users"></label>
+            </div>
+            <div class="admin-table-scroll">
+              <table class="admin-record-table">
+                <thead><tr><th>User</th><th>Phone</th><th>Delivery address</th><th>Profile photo</th></tr></thead>
+                <tbody id="adminUserRows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="admin-view" id="adminOrdersView" data-admin-panel="orders" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <p class="admin-kicker">STORE ACTIVITY</p>
+              <h1>Orders</h1>
+              <p>Review customer order requests, item details, and delivery addresses.</p>
+            </div>
+          </div>
+          <section class="admin-panel">
+            <div class="admin-panel-heading">
+              <div><h2>Order requests</h2><p id="orderCountLabel">Loading orders...</p></div>
+            </div>
+            <div class="admin-table-toolbar">
+              <label class="admin-search"><span aria-hidden="true">⌕</span><input id="orderSearch" type="search" placeholder="Search orders or customers..." aria-label="Search orders"></label>
+            </div>
+            <div class="admin-table-scroll">
+              <table class="admin-record-table admin-orders-table">
+                <thead><tr><th>Order</th><th>Customer &amp; delivery</th><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th>Payment</th><th>Details</th></tr></thead>
+                <tbody id="adminOrderRows"></tbody>
+              </table>
+            </div>
+          </section>
+          <div class="admin-order-detail-backdrop" id="adminOrderDetailBackdrop" hidden>
+            <aside class="admin-order-detail" role="dialog" aria-modal="true" aria-labelledby="adminOrderDetailTitle">
+              <div class="admin-panel-heading">
+                <div><h2 id="adminOrderDetailTitle">Order details</h2><p id="adminOrderDetailStatus"></p></div>
+                <button type="button" class="admin-close-form" id="closeOrderDetail" aria-label="Close order details">×</button>
+              </div>
+              <div class="admin-order-detail-content" id="adminOrderDetailContent"></div>
+              <div class="admin-order-detail-actions" id="adminOrderDetailActions"></div>
+              <p class="admin-order-detail-message" id="adminOrderDetailMessage" role="status" aria-live="polite" hidden></p>
+            </aside>
+          </div>
+        </section>
+
+        <section class="admin-view" id="adminProductsView" data-admin-panel="products" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <p class="admin-kicker">INVENTORY</p>
+              <h1>Products</h1>
+              <p>Add gadgets and keep descriptions, images, prices, and stock up to date.</p>
+            </div>
+            <button type="button" class="admin-primary-button" data-open-product-form><span>＋</span> Add product</button>
+          </div>
+
+          <section class="admin-panel admin-product-detail-panel" id="adminProductDetail" hidden>
+            <div class="admin-panel-heading">
+              <div><h2 id="adminProductDetailName">Product details</h2><p>Private catalog details</p></div>
+              <button type="button" class="admin-close-form" id="closeProductDetail" aria-label="Close product details">×</button>
+            </div>
+            <div class="admin-product-detail-content" id="adminProductDetailContent"></div>
+            <div class="admin-product-detail-actions">
+              <button type="button" class="admin-secondary-button" id="editProductButton">Edit product</button>
+              <button type="button" class="admin-danger-button" id="deleteProductButton">Delete product</button>
+            </div>
+          </section>
+
+          <section class="admin-panel admin-product-panel">
+            <div class="admin-panel-heading admin-products-heading">
+              <div><h2>Product catalog</h2><p id="productCountLabel">Loading products...</p></div>
+            </div>
+            <div class="admin-table-toolbar">
+              <label class="admin-search"><span aria-hidden="true">⌕</span><input id="productSearch" type="search" placeholder="Search products..." aria-label="Search products"></label>
+              <label class="admin-filter-label"><span class="sr-only">Category</span><select id="categoryFilter"><option value="">All categories</option></select></label>
+              <label class="admin-filter-label"><span class="sr-only">Stock status</span><select id="stockFilter"><option value="">All stock</option><option value="in">In stock</option><option value="low">Low stock</option><option value="out">Out of stock</option></select></label>
+            </div>
+            <div class="admin-table-scroll">
+              <table class="admin-product-table">
+                <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody id="adminProductRows"></tbody>
+              </table>
+            </div>
+            <div class="admin-pagination">
+              <label>Rows per page
+                <select id="pageSize"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select>
+              </label>
+              <span id="paginationSummary">Showing 0 products</span>
+              <div><button id="previousPage" type="button" aria-label="Previous page" disabled>‹</button><span id="pageNumber">1 / 1</span><button id="nextPage" type="button" aria-label="Next page" disabled>›</button></div>
+            </div>
+          </section>
+
+          <section class="admin-panel admin-product-form-panel" id="productFormPanel" hidden>
+            <div class="admin-panel-heading">
+              <div><h2 id="productFormTitle">Add a gadget</h2><p id="productFormDescription">New products will appear in the storefront catalog.</p></div>
+              <button type="button" class="admin-close-form" id="closeProductForm" aria-label="Close add product form">×</button>
+            </div>
+            <form id="productForm" class="site-form admin-product-form">
+              <label>Product name<input name="name" type="text" required maxlength="100"></label>
+              <label>Category<input name="category" type="text" placeholder="e.g. Smartphones" required maxlength="60"></label>
+              <label class="admin-form-wide">Description<textarea name="description" required minlength="20" maxlength="1000" rows="3" placeholder="Describe the product's key features and uses."></textarea></label>
+              <label>Price (NGN)<input name="price" type="number" min="0.01" step="0.01" required></label>
+              <label>Stock quantity<input name="stock" type="number" min="0" step="1" value="0" required></label>
+              <label>Old price (optional)<input name="oldPrice" type="number" min="0.01" step="0.01"></label>
+              <label>Product image style
+                <select name="type" required>
+                  <option value="phone">Phone</option>
+                  <option value="laptop">Laptop</option>
+                  <option value="headphones">Headphones</option>
+                  <option value="watch">Watch / wearable</option>
+                </select>
+              </label>
+              <label>Badge (optional)<input name="badge" type="text" placeholder="New, Sale..." maxlength="24"></label>
+              <label>Product image URL (optional)<input name="image" type="url" placeholder="https://example.com/product-image.jpg"></label>
+              <p class="form-help admin-form-wide">Use a JPG URL or leave blank for the matching store image.</p>
+              <div class="admin-form-actions admin-form-wide">
+                <button class="admin-secondary-button" type="button" id="cancelProductForm">Cancel</button>
+                <button class="admin-primary-button" id="saveProductButton" type="submit">Save product <span>→</span></button>
+              </div>
+            </form>
+          </section>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="admin.js"></script>
+</body>
+</html>

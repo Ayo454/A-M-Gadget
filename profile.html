@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0b0f">
+  <title>My Profile | A&amp;M Gadget</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="announcement">
+    <p>Delivery fees are based on your destination.</p>
+    <button aria-label="Close announcement">&times;</button>
+  </div>
+  <header class="header">
+    <a class="brand" href="index.html" aria-label="A&amp;M Gadget home"><span class="brand-mark">A&amp;M</span><span>A&amp;M Gadget</span></a>
+    <nav class="nav" aria-label="Main navigation">
+      <a href="index.html#shop">Shop</a>
+      <a href="index.html#categories">Categories</a>
+      <a href="index.html#products">New arrivals</a>
+      <a href="index.html#offers">Offers</a>
+    </nav>
+    <div class="header-actions">
+      <a class="icon-button" href="index.html#products" aria-label="Search products">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+      </a>
+      <a class="icon-button" href="index.html#products" aria-label="Continue shopping">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 8.5h15l-1 12h-13z"></path><path d="M8.5 9V6.5a3.5 3.5 0 0 1 7 0V9"></path></svg>
+      </a>
+      <button class="icon-button account-button" type="button" aria-label="Account" aria-expanded="false">
+        <svg class="account-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.5 21a7.5 7.5 0 0 1 15 0"></path></svg>
+        <img class="account-avatar-icon" alt="" hidden>
+      </button>
+      <button class="menu-button" aria-label="Open menu" aria-expanded="false"><span></span><span></span></button>
+    </div>
+  </header>
+  <main class="form-page customer-page">
+    <p class="form-status" id="pageStatus" role="status" aria-live="polite">Loading your profile...</p>
+    <section class="customer-card" data-account-view="profile" hidden>
+      <p class="eyebrow dark"><span></span> Your account</p>
+      <h1>My profile</h1>
+      <div class="profile-summary">
+        <img class="profile-photo" id="profilePhoto" alt="Your profile photo" hidden>
+        <div class="profile-initial" id="profileInitial" aria-hidden="true"></div>
+        <div><h2 id="profileName"></h2><p id="profileEmail"></p></div>
+      </div>
+      <div class="customer-shortcuts">
+        <a href="account-info.html">View account information <span>→</span></a>
+        <a href="orders.html">View your orders <span>→</span></a>
+      </div>
+    </section>
+  </main>
+  <footer><a class="brand" href="index.html"><span class="brand-mark">A&amp;M</span><span>A&amp;M Gadget</span></a><p>Technology with purpose.</p></footer>
+  <script src="customer-nav.js"></script>
+  <script src="customer-pages.js"></script>
+</body>
+</html>

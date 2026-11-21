@@ -1,0 +1,20 @@
+# A&M Gadget
+
+## Run the store
+
+This project uses Node.js built-in modules and does not need package installation.
+
+1. Copy `.env.example` to `.env`.
+2. Set `ADMIN_EMAIL` and replace `ADMIN_PASSWORD` with a strong password in `.env`.
+3. In the project folder, run `node server.js`.
+4. Open the local address configured by `PORT` in `.env` (currently `http://127.0.0.1:38123`).
+
+To enable transactional email, add `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` to `.env`; the sender email must be verified in Brevo. `BREVO_SENDER_NAME` is optional and defaults to `A&M Gadget`. The store sends a welcome email after registration, an order confirmation after an order is saved, and a status update after an admin changes an order. Email delivery failures are logged and do not undo a successful registration or order.
+
+The admin signs in directly at `/admin.html` to open a private dashboard with catalog summaries, product search, category and stock filters, paginated inventory, registered users, and customer orders. Product details open inside the admin dashboard, where products can be edited or deleted; these controls and user/order records are available only through admin-authenticated API routes. Customer and admin sessions survive page refreshes and server restarts; signing out revokes the session. Session records are kept in the private `data/sessions.json` file, with session tokens stored as hashes, and the browser cookie persists for up to 400 days. Run this project with `node server.js` or `npm start`; a static preview server does not provide the admin APIs. Product prices are displayed in Nigerian naira (NGN); the existing numeric product prices are treated as naira amounts. Products include a description and stock count; an optional JPG image URL can be supplied, or the matching local JPG in `images/products/` is used. Customers can open a product card for its public details. Customers can create an account or sign in at `/account.html`; after signing in, the user icon opens links to separate profile, account-information, and order-history pages, with sign-out available in the menu. Checkout requires a signed-in customer, pre-fills their saved contact details, and shows a server-calculated subtotal, address-based delivery fee, and total before placing an order. Delivery is ₦2,500 within Ogun State and ₦3,500 to Ibadan, Oyo State. Other destinations use OpenStreetMap geocoding and OSRM road distance from Ilishan-Remo, with a default ₦1,000 base plus ₦35 per km, rounded up to the next ₦100 and a ₦2,500 minimum. These public services need no API key or billing; requests are cached and throttled, but public services have usage limits and no uptime guarantee, so higher-traffic deployments should use a hosted provider or self-host the services. For other destinations, the customer's address is sent to OpenStreetMap services for routing, with attribution shown in checkout. Optionally set `DELIVERY_ORIGIN`, `DELIVERY_BASE_NGN`, `DELIVERY_PER_KM_NGN`, and `DELIVERY_MINIMUM_NGN`. To accept orders, set `PAYMENT_BANK_NAME`, `PAYMENT_ACCOUNT_NAME`, and `PAYMENT_ACCOUNT_NUMBER` in the private `.env` file. New orders start as awaiting payment; customers use “I have paid” after transferring, and admins verify the transfer before confirming payment and progressing the order through shipping, in transit, and delivered. Admins can also cancel eligible orders; cancellation after payment confirmation is marked as requiring a refund. Registration collects a name, email, phone number, delivery address, and password, with an optional profile photo (PNG, JPG, or WebP up to 2 MB). Added products are stored in `data/products.json` and appear on both the home page and the all-products page. Customer records are stored in `data/users.json`; passwords are salted and hashed, not stored as plain text. Profile photos are kept in the private `data/uploads/` folder and served only to the signed-in customer.
+
+Keep `.env` private. For a live website, use HTTPS and configure the admin credentials and persistent data storage on the hosting provider.
+
+## Tests
+
+Run the server and account tests with `node --test`.
