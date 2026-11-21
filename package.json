@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
+    "migrate:supabase": "node scripts/migrate-to-supabase.js",
     "test": "node --test"
   }
 }

@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
 const { promisify } = require("node:util");
+const { SupabaseStore } = require("./supabase-store");
 
 const scrypt = promisify(crypto.scrypt);
 const publicDirectory = __dirname;
@@ -180,6 +181,18 @@ function validateProduct(input) {
 
 function createServer(options = {}) {
   const dataDirectory = options.dataDirectory || path.join(__dirname, "data");
+  const supabaseUrl = String(options.supabaseUrl ?? process.env.SUPABASE_URL ?? "").trim();
+  const supabaseServiceRoleKey = String(options.supabaseServiceRoleKey ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
+  if (!options.supabaseStore && Boolean(supabaseUrl) !== Boolean(supabaseServiceRoleKey)) {
+    throw new Error("Configure both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to enable Supabase storage.");
+  }
+  const supabaseStore = options.supabaseStore || (supabaseUrl
+    ? new SupabaseStore({
+      url: supabaseUrl,
+      serviceRoleKey: supabaseServiceRoleKey,
+      fetchImpl: options.supabaseFetch || globalThis.fetch
+    })
+    : null);
   const adminEmail = String(options.adminEmail ?? process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
   const adminPassword = String(options.adminPassword ?? process.env.ADMIN_PASSWORD ?? "");
   const brevoApiKey = String(options.brevoApiKey ?? process.env.BREVO_API_KEY ?? "").trim();
@@ -415,6 +428,14 @@ function createServer(options = {}) {
   }
 
   async function readStore(name, initialValue) {
+    if (supabaseStore) {
+      const collection = path.basename(name, ".json");
+      const records = await supabaseStore.getCollection(collection);
+      if (records !== null) return records;
+      const initialRecords = JSON.parse(JSON.stringify(initialValue));
+      await supabaseStore.setCollection(collection, initialRecords);
+      return initialRecords;
+    }
     const filePath = path.join(dataDirectory, name);
     try {
       return JSON.parse(await fs.readFile(filePath, "utf8"));
@@ -428,11 +449,20 @@ function createServer(options = {}) {
     }
   }
 
+  async function writeStore(name, records) {
+    if (supabaseStore) {
+      const collection = path.basename(name, ".json");
+      await supabaseStore.setCollection(collection, records);
+      return;
+    }
+    await fs.writeFile(path.join(dataDirectory, name), `${JSON.stringify(records, null, 2)}\n`, { mode: 0o600 });
+  }
+
   async function mutateStore(name, initialValue, update) {
     const operation = writeQueue.then(async () => {
       const store = await readStore(name, initialValue);
       const result = await update(store);
-      await fs.writeFile(path.join(dataDirectory, name), `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
+      await writeStore(name, store);
       return result;
     });
     writeQueue = operation.then(() => undefined, () => undefined);
@@ -676,11 +706,15 @@ function createServer(options = {}) {
     if (!sessionsLoadPromise) {
       sessionsLoadPromise = (async () => {
         let records;
-        try {
-          records = JSON.parse(await fs.readFile(path.join(dataDirectory, "sessions.json"), "utf8"));
-        } catch (error) {
-          if (error.code === "ENOENT") return;
-          throw error;
+        if (supabaseStore) {
+          records = await readStore("sessions.json", []);
+        } else {
+          try {
+            records = JSON.parse(await fs.readFile(path.join(dataDirectory, "sessions.json"), "utf8"));
+          } catch (error) {
+            if (error.code === "ENOENT") return;
+            throw error;
+          }
         }
         if (!Array.isArray(records)) throw new Error("The stored sessions file is invalid.");
         records.forEach(record => {
@@ -704,8 +738,12 @@ function createServer(options = {}) {
       const temporaryFile = `${sessionFile}.${crypto.randomUUID()}.tmp`;
       const records = Array.from(sessions, ([tokenHash, session]) => ({ tokenHash, user: session.user }));
       try {
-        await fs.writeFile(temporaryFile, `${JSON.stringify(records, null, 2)}\n`, { flag: "wx", mode: 0o600 });
-        await fs.rename(temporaryFile, sessionFile);
+        if (supabaseStore) {
+          await supabaseStore.setCollection("sessions", records);
+        } else {
+          await fs.writeFile(temporaryFile, `${JSON.stringify(records, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+          await fs.rename(temporaryFile, sessionFile);
+        }
       } catch (error) {
         await fs.rm(temporaryFile, { force: true });
         throw error;
@@ -996,8 +1034,14 @@ function createServer(options = {}) {
         jsonResponse(response, 404, { error: "No profile photo was uploaded." });
         return;
       }
-      const filename = path.basename(session.user.avatarFile);
-      const image = await fs.readFile(path.join(dataDirectory, "uploads", filename));
+      let image;
+      if (supabaseStore) {
+        const avatar = await supabaseStore.downloadAvatar(session.user.avatarFile);
+        image = avatar.buffer;
+      } else {
+        const filename = path.basename(session.user.avatarFile);
+        image = await fs.readFile(path.join(dataDirectory, "uploads", filename));
+      }
       response.writeHead(200, {
         "Content-Type": session.user.avatarType,
         "Cache-Control": "private, no-store",
@@ -1040,15 +1084,21 @@ function createServer(options = {}) {
         if (users.some(existing => existing.email === email)) {
           throw Object.assign(new Error("An account with that email already exists."), { status: 409 });
         }
+        const id = crypto.randomUUID();
         let avatarFile = null;
         if (avatar) {
-          avatarFile = `${crypto.randomUUID()}${avatar.extension}`;
-          const uploadDirectory = path.join(dataDirectory, "uploads");
-          await fs.mkdir(uploadDirectory, { recursive: true });
-          await fs.writeFile(path.join(uploadDirectory, avatarFile), avatar.buffer, { flag: "wx", mode: 0o600 });
+          if (supabaseStore) {
+            avatarFile = `${id}/${crypto.randomUUID()}${avatar.extension}`;
+            await supabaseStore.uploadAvatar(avatarFile, avatar.buffer, avatar.contentType);
+          } else {
+            avatarFile = `${crypto.randomUUID()}${avatar.extension}`;
+            const uploadDirectory = path.join(dataDirectory, "uploads");
+            await fs.mkdir(uploadDirectory, { recursive: true });
+            await fs.writeFile(path.join(uploadDirectory, avatarFile), avatar.buffer, { flag: "wx", mode: 0o600 });
+          }
         }
         const created = {
-          id: crypto.randomUUID(),
+          id,
           name,
           email,
           phone,
@@ -1249,6 +1299,11 @@ if (require.main === module) {
       if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) {
         console.warn("Transactional email is disabled until BREVO_API_KEY and BREVO_SENDER_EMAIL are configured.");
       }
+      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.warn("Using local JSON storage. Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to use Supabase.");
+      } else {
+        console.log("Supabase storage is enabled.");
+      }
     });
   }).catch(error => {
     console.error("Could not load server configuration:", error);
@@ -1256,4 +1311,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createServer };
+module.exports = { createServer, loadEnvironmentFile };

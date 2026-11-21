@@ -303,6 +303,63 @@ test("registers customers and stores only salted password hashes", async t => {
   assert.equal((await login.json()).user.email, "customer@example.com");
 });
 
+test("stores customer data, sessions, and avatars in Supabase when configured", async t => {
+  const collections = new Map();
+  const avatars = new Map();
+  const supabaseStore = {
+    async getCollection(collection) {
+      return collections.has(collection)
+        ? JSON.parse(JSON.stringify(collections.get(collection)))
+        : null;
+    },
+    async setCollection(collection, records) {
+      collections.set(collection, JSON.parse(JSON.stringify(records)));
+    },
+    async uploadAvatar(objectPath, buffer, contentType) {
+      avatars.set(objectPath, { buffer: Buffer.from(buffer), contentType });
+    },
+    async downloadAvatar(objectPath) {
+      return avatars.get(objectPath);
+    }
+  };
+  const app = await createTestApp(t, { supabaseStore });
+  let baseUrl = await app.listen();
+
+  const productsResponse = await jsonRequest(`${baseUrl}/api/products`);
+  assert.equal(productsResponse.status, 200);
+  assert.equal(collections.get("products").length > 0, true);
+
+  const registration = await jsonRequest(`${baseUrl}/api/auth/register`, "POST", {
+    name: "Supabase Customer",
+    email: "supabase@example.com",
+    password: "customer-password",
+    phone: "+1 555 123 4567",
+    address: "123 Example Street, Test City",
+    avatar: {
+      type: "image/png",
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/S2cAAAAASUVORK5CYII="
+    }
+  });
+  assert.equal(registration.status, 201);
+  const cookie = sessionCookie(registration);
+  const storedUser = collections.get("users")[0];
+  assert.equal(storedUser.passwordHash !== "customer-password", true);
+  assert.equal(storedUser.avatarFile.startsWith(`${storedUser.id}/`), true);
+  assert.equal(collections.get("sessions").length, 1);
+  assert.equal(avatars.has(storedUser.avatarFile), true);
+  await assert.rejects(fs.readFile(path.join(app.dataDirectory, "users.json")), { code: "ENOENT" });
+
+  const avatar = await jsonRequest(`${baseUrl}/api/auth/avatar`, "GET", undefined, cookie);
+  assert.equal(avatar.status, 200);
+  assert.equal(avatar.headers.get("content-type"), "image/png");
+
+  await app.close();
+  app.restart();
+  baseUrl = await app.listen();
+  const persistedSession = await jsonRequest(`${baseUrl}/api/auth/session`, "GET", undefined, cookie);
+  assert.equal((await persistedSession.json()).user.email, "supabase@example.com");
+});
+
 test("sends Brevo welcome, order, and admin status emails", async t => {
   const sentEmails = [];
   const app = await createTestApp(t, {
