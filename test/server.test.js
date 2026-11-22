@@ -77,7 +77,10 @@ test("serves the store and keeps the data files private", async t => {
 
   const home = await fetch(baseUrl);
   assert.equal(home.status, 200);
-  assert.match(await home.text(), /A&amp;M Gadget/);
+  const homeHtml = await home.text();
+  assert.match(homeHtml, /A&amp;M Gadget/);
+  assert.match(homeHtml, /class="cart-drawer" inert/);
+  assert.doesNotMatch(homeHtml, /class="cart-drawer" aria-hidden=/);
 
   const accountPage = await fetch(`${baseUrl}/account.html`);
   assert.equal(accountPage.status, 200);
@@ -86,6 +89,7 @@ test("serves the store and keeps the data files private", async t => {
   const riderPageHtml = await riderPage.text();
   assert.match(riderPageHtml, /Rider portal/);
   assert.doesNotMatch(riderPageHtml, /href="(?:index|admin)(?:\.html|\/|#)/);
+  assert.match(riderPageHtml, /mobile-web-app-capable/);
   const riderAppRoute = await fetch(`${baseUrl}/rider`);
   assert.equal(riderAppRoute.status, 200);
   assert.match(await riderAppRoute.text(), /data-install-app/);
@@ -95,6 +99,7 @@ test("serves the store and keeps the data files private", async t => {
   assert.equal(shopAppRoute.status, 200);
   const shopAppHtml = await shopAppRoute.text();
   assert.match(shopAppHtml, /app.webmanifest/);
+  assert.match(shopAppHtml, /mobile-web-app-capable/);
   assert.match(shopAppHtml, /apple-mobile-web-app-capable/);
   for (const manifestPath of ["/app.webmanifest", "/rider.webmanifest", "/admin.webmanifest"]) {
     const manifestResponse = await fetch(`${baseUrl}${manifestPath}`);
@@ -111,6 +116,7 @@ test("serves the store and keeps the data files private", async t => {
   assert.equal(adminPage.status, 200);
   const adminPageHtml = await adminPage.text();
   assert.match(adminPageHtml, /admin\.webmanifest/);
+  assert.match(adminPageHtml, /mobile-web-app-capable/);
   assert.match(adminPageHtml, /data-install-app/);
   assert.match(adminPageHtml, /src="pwa\.js"/);
   const oldAdminPage = await fetch(`${baseUrl}/admin.html`, { redirect: "manual" });

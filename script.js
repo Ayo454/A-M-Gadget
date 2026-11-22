@@ -204,7 +204,7 @@ function setCart(open) {
   cartDrawer.classList.toggle("open", open);
   drawerOverlay.classList.toggle("open", open);
   if (!open && cartDrawer.contains(document.activeElement)) bagButton.focus();
-  cartDrawer.setAttribute("aria-hidden", String(!open));
+  cartDrawer.inert = !open;
   bagButton.setAttribute("aria-expanded", String(open));
   if (open) window.requestAnimationFrame(() => {
     if (cartDrawer.classList.contains("open")) document.querySelector(".cart-close").focus();
