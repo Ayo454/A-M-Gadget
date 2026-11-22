@@ -573,6 +573,7 @@ test("adds security headers, rejects cross-origin mutations, and limits failed l
   assert.equal(shopPage.headers.get("x-powered-by"), null);
   assert.equal(shopPage.headers.get("cross-origin-opener-policy"), "same-origin");
   assert.match(shopPage.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+  assert.match(shopPage.headers.get("content-security-policy"), /script-src 'self' 'sha256-BkKP2XO6WOEc3kXOiLr2ZoY83hamalKjPY9xBcbXVuw='/);
   const products = await fetch(`${baseUrl}/api/products`);
   assert.equal(products.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
 
@@ -1052,7 +1053,7 @@ test("restricts product creation to the admin and persists added products", asyn
   assert.equal(invalidStock.status, 400);
   const invalidImage = await jsonRequest(`${baseUrl}/api/admin/products`, "POST", {
     ...product,
-    image: "https://example.com/product.png"
+    image: "https://example.com/product.svg"
   }, cookie);
   assert.equal(invalidImage.status, 400);
 
@@ -1068,14 +1069,14 @@ test("restricts product creation to the admin and persists added products", asyn
     ...product,
     name: "Updated Test Tablet",
     price: "649.99",
-    image: "https://encrypted-tbn0.gstatic.com/images?test=thumbnail"
+    image: "https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/iphone-16-pro?wid=512&fmt=jpeg"
   }, cookie);
   assert.equal(update.status, 200);
   const updatedProduct = await update.json();
   assert.equal(updatedProduct.id, createdProduct.id);
   assert.equal(updatedProduct.name, "Updated Test Tablet");
   assert.equal(updatedProduct.price, 649.99);
-  assert.equal(updatedProduct.image, "https://encrypted-tbn0.gstatic.com/images?test=thumbnail");
+  assert.equal(updatedProduct.image, "https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/iphone-16-pro?wid=512&fmt=jpeg");
 
   const deletion = await jsonRequest(`${baseUrl}/api/admin/products/${createdProduct.id}`, "DELETE", undefined, cookie);
   assert.equal(deletion.status, 200);

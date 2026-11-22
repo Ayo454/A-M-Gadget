@@ -37,7 +37,7 @@ const securityHeaders = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; manifest-src 'self'; worker-src 'self'"
+  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-BkKP2XO6WOEc3kXOiLr2ZoY83hamalKjPY9xBcbXVuw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; manifest-src 'self'; worker-src 'self'"
 };
 const defaultProducts = [
   { id: "volt-one-ultra", name: "Volt One Ultra", category: "Smartphones", description: "A premium everyday phone with a vivid display, a versatile camera system, and fast performance for work and entertainment.", price: 899, oldPrice: 999, type: "phone", image: "/images/products/phone.jpg", stock: 12, badge: "New" },
@@ -195,7 +195,7 @@ function validateProduct(input) {
   let image = `/images/products/${type}.jpg`;
   if (imageInput) {
     if (imageInput.startsWith("/") && !imageInput.startsWith("//") &&
-        /^\/images\/products\/[A-Za-z0-9._-]+\.jpe?g$/i.test(imageInput)) {
+        /^\/images\/products\/[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$/i.test(imageInput)) {
       image = imageInput;
     } else {
       let imageUrl;
@@ -204,11 +204,13 @@ function validateProduct(input) {
       } catch {
         throw Object.assign(new Error("Enter an image URL beginning with http:// or https://, or use a product image path."), { status: 400 });
       }
-      const isJpeg = /\.jpe?g$/i.test(imageUrl.pathname) || imageUrl.searchParams.get("fm") === "jpg";
+      const supportedImageFormat = /(?:\.jpe?g|\.png|\.webp)$/i.test(imageUrl.pathname) ||
+        [imageUrl.searchParams.get("fm"), imageUrl.searchParams.get("fmt")]
+          .some(format => ["jpg", "jpeg", "png", "webp"].includes((format || "").toLowerCase()));
       const isGoogleThumbnail = imageUrl.hostname === "encrypted-tbn0.gstatic.com" && imageUrl.pathname === "/images";
       if (!["http:", "https:"].includes(imageUrl.protocol) || imageUrl.username || imageUrl.password ||
-          (!isJpeg && !isGoogleThumbnail)) {
-        throw Object.assign(new Error("Product images must be JPG/JPEG URLs or Google thumbnail URLs."), { status: 400 });
+          (!supportedImageFormat && !isGoogleThumbnail)) {
+        throw Object.assign(new Error("Product images must be JPG, PNG, or WebP URLs, or Google thumbnail URLs."), { status: 400 });
       }
       image = imageUrl.href;
     }
