@@ -1,4 +1,4 @@
-const CACHE_NAME = "am-gadget-app-shell-v1";
+const CACHE_NAME = "am-gadget-app-shell-v2";
 const APP_SHELL = [
   "/app.html",
   "/rider.app.html",
@@ -63,7 +63,7 @@ self.addEventListener("fetch", event => {
           return caches.open(CACHE_NAME)
             .then(cache => cache.put(request, response.clone()).then(() => response));
         }).catch(() => cached);
-        return cached || network;
+        return network;
       })
     );
   }

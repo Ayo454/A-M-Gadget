@@ -16,6 +16,9 @@ let appProductsLoaded = false;
 let appCart = [];
 let selectedCategory = "All";
 let appCurrentPage = 1;
+let activeAppView = "shop";
+let appViewBeforeCart = "shop";
+let checkoutReturnView = "shop";
 let quoteVersion = 0;
 let activeQuoteKey = "";
 let paymentOrderId = "";
@@ -72,13 +75,15 @@ function showAppView(view) {
     openCart();
     return;
   }
+  if (!appCartOverlay.hidden) closeCart();
+  activeAppView = view;
   document.querySelectorAll("[data-app-panel]").forEach(panel => {
     panel.hidden = panel.dataset.appPanel !== view;
   });
   document.querySelectorAll("[data-app-view]").forEach(button => {
     const active = button.dataset.appView === view;
     button.classList.toggle("active", active);
-    if (button.dataset.appView !== "bag") button.setAttribute("aria-current", active ? "page" : "false");
+    button.setAttribute("aria-current", active ? "page" : "false");
   });
   if (view === "orders") loadAppOrders().catch(error => setAppFeedback(error.message, true));
 }
@@ -519,12 +524,27 @@ async function loadAppOrders() {
 }
 
 function openCart() {
+  if (appCartOverlay.hidden) appViewBeforeCart = activeAppView;
+  activeAppView = "bag";
   renderCart();
   appCartOverlay.hidden = false;
+  document.body.classList.add("cart-open");
+  document.querySelectorAll("[data-app-view]").forEach(button => {
+    const active = button.dataset.appView === "bag";
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
 }
 
 function closeCart() {
   appCartOverlay.hidden = true;
+  document.body.classList.remove("cart-open");
+  if (activeAppView === "bag") activeAppView = appViewBeforeCart;
+  document.querySelectorAll("[data-app-view]").forEach(button => {
+    const active = button.dataset.appView === activeAppView;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
 }
 
 function currentCheckoutQuoteKey() {
@@ -592,7 +612,14 @@ async function openCheckout() {
     setAuthFeedback("Sign in or create an account to place your order.");
     return;
   }
+  checkoutReturnView = appViewBeforeCart;
   closeCart();
+  activeAppView = "bag";
+  document.querySelectorAll("[data-app-view]").forEach(button => {
+    const active = button.dataset.appView === "bag";
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
   appCheckoutForm.hidden = false;
   appPaymentConfirmation.hidden = true;
   appCheckoutForm.reset();
@@ -610,6 +637,14 @@ function closeCheckout() {
   appCheckoutOverlay.hidden = true;
   document.body.classList.remove("checkout-open");
   quoteVersion += 1;
+  if (activeAppView === "bag") {
+    activeAppView = checkoutReturnView;
+    document.querySelectorAll("[data-app-view]").forEach(button => {
+      const active = button.dataset.appView === activeAppView;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-current", active ? "page" : "false");
+    });
+  }
 }
 
 function displayPaymentConfirmation(order, paymentDetails) {
