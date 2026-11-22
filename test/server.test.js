@@ -334,6 +334,8 @@ test("approves riders, enforces delivery codes, and pays weekly commission", asy
   const emails = [];
   let tokenRequest;
   const app = await createTestApp(t, {
+    orderNotificationEmail: "orders@example.com",
+    orderNotificationPhones: "08011111111, 08022222222, 08033333333",
     deliveryOtpSecret: "delivery-test-secret-with-at-least-32-characters",
     brevoSmsSender: "AMGadget",
     brevoOAuthClientId: "test-oauth-client",
@@ -441,11 +443,12 @@ test("approves riders, enforces delivery codes, and pays weekly commission", asy
   const requestedCodeResult = await requestedCode.json();
   assert.doesNotMatch(JSON.stringify(requestedCodeResult), /\b\d{6}\b/);
   assert.match(requestedCodeResult.message, /email and phone/);
-  assert.equal(smsMessages.length, 1);
+  assert.equal(smsMessages.length, 4);
   assert.match(tokenRequest.body, /scope=transactional\.sms%3Awrite/);
   assert.equal(smsRequests[0].headers.authorization, "Bearer test-sms-token");
   assert.equal("api-key" in smsRequests[0].headers, false);
-  const codeMatch = smsMessages[0].content.match(/code: (\d{6})\./);
+  const customerSms = smsMessages.filter(message => message.recipient === "2348012223344");
+  const codeMatch = customerSms[0].content.match(/code: (\d{6})\./);
   assert.ok(codeMatch);
   assert.equal(emails.some(email => email.subject.includes("Delivery confirmation code")), true);
 
@@ -476,13 +479,25 @@ test("approves riders, enforces delivery codes, and pays weekly commission", asy
   await fs.writeFile(path.join(app.dataDirectory, "orders.json"), `${JSON.stringify(refreshedOrders, null, 2)}\n`);
   const resentCode = await jsonRequest(`${baseUrl}/api/rider/orders/${orderId}/request-code`, "POST", {}, riderCookie);
   assert.equal(resentCode.status, 200);
-  const resentCodeMatch = smsMessages[1].content.match(/code: (\d{6})\./);
+  const resentCustomerSms = smsMessages.filter(message => message.recipient === "2348012223344");
+  const resentCodeMatch = resentCustomerSms[1].content.match(/code: (\d{6})\./);
   assert.ok(resentCodeMatch);
   const verified = await jsonRequest(`${baseUrl}/api/rider/orders/${orderId}/verify-code`, "POST", {
     code: resentCodeMatch[1]
   }, riderCookie);
   assert.equal(verified.status, 200);
   assert.equal((await verified.json()).order.riderCommission, 75);
+  const deliveryAlert = emails.find(email =>
+    email.to[0].email === "orders@example.com" && email.subject.includes("Order delivered")
+  );
+  assert.ok(deliveryAlert);
+  assert.match(deliveryAlert.textContent, /Delivered by: Test Rider/);
+  const deliveredCustomerEmail = emails.find(email =>
+    email.to[0].email === "delivery-customer@example.com" && email.subject.includes("Delivered")
+  );
+  assert.ok(deliveredCustomerEmail);
+  assert.match(deliveredCustomerEmail.textContent, /Delivered by: Test Rider/);
+  assert.equal(smsMessages.filter(message => message.content.includes(`Order ${orderId.slice(0, 8)} delivered by Test Rider`)).length, 3);
 
   const completedDashboard = await jsonRequest(`${baseUrl}/api/rider/dashboard`, "GET", undefined, riderCookie);
   const completedData = await completedDashboard.json();
@@ -491,6 +506,12 @@ test("approves riders, enforces delivery codes, and pays weekly commission", asy
   const payout = await jsonRequest(`${baseUrl}/api/rider/payout-requests`, "POST", {}, riderCookie);
   assert.equal(payout.status, 201);
   assert.equal((await payout.json()).payoutRequest.amount, 75);
+  const payoutAlert = emails.find(email =>
+    email.to[0].email === "orders@example.com" && email.subject.includes("Payout request from Test Rider")
+  );
+  assert.ok(payoutAlert);
+  assert.match(payoutAlert.textContent, /Amount requested: ₦75\.00/);
+  assert.equal(smsMessages.filter(message => message.content.includes("Payout request from Test Rider")).length, 3);
   const duplicatePayout = await jsonRequest(`${baseUrl}/api/rider/payout-requests`, "POST", {}, riderCookie);
   assert.equal(duplicatePayout.status, 409);
 
@@ -519,6 +540,42 @@ test("marks session cookies Secure in production", async t => {
 
   assert.equal(registration.status, 201);
   assert.match(registration.headers.get("set-cookie"), /; Secure/);
+});
+
+test("adds security headers, rejects cross-origin mutations, and limits failed logins", async t => {
+  const app = await createTestApp(t);
+  const baseUrl = await app.listen();
+
+  const shopPage = await fetch(`${baseUrl}/app`);
+  assert.equal(shopPage.headers.get("x-frame-options"), "DENY");
+  assert.equal(shopPage.headers.get("x-content-type-options"), "nosniff");
+  assert.match(shopPage.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+  const products = await fetch(`${baseUrl}/api/products`);
+  assert.equal(products.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+
+  const crossOriginLogin = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "https://attacker.example"
+    },
+    body: JSON.stringify({ email: "customer@example.com", password: "wrong-password" })
+  });
+  assert.equal(crossOriginLogin.status, 403);
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const failedLogin = await jsonRequest(`${baseUrl}/api/auth/login`, "POST", {
+      email: "locked@example.com",
+      password: "wrong-password"
+    });
+    assert.equal(failedLogin.status, 401);
+  }
+  const rateLimitedLogin = await jsonRequest(`${baseUrl}/api/auth/login`, "POST", {
+    email: "locked@example.com",
+    password: "wrong-password"
+  });
+  assert.equal(rateLimitedLogin.status, 429);
+  assert.match(rateLimitedLogin.headers.get("retry-after"), /^\d+$/);
 });
 
 test("stores customer data, sessions, and avatars in Supabase when configured", async t => {
@@ -613,12 +670,14 @@ test("sends Brevo welcome, order, and admin status emails", async t => {
   }, customerCookie);
   assert.equal(orderResponse.status, 201);
   const order = (await orderResponse.json()).order;
-  assert.equal(sentEmails.length, 2);
+  assert.equal(sentEmails.length, 3);
   assert.equal(sentEmails[1].options.body.to[0].email, "customer@example.com");
   assert.match(sentEmails[1].options.body.subject, /We received your order/);
   assert.match(sentEmails[1].options.body.textContent, new RegExp(order.id));
   assert.match(sentEmails[1].options.body.htmlContent, /Volt One Ultra/);
   assert.match(sentEmails[1].options.body.htmlContent, /data:image\/jpeg;base64,/);
+  assert.equal(sentEmails[2].options.body.to[0].email, "owner@example.com");
+  assert.match(sentEmails[2].options.body.subject, /New order received/);
 
   const paymentReport = await jsonRequest(`${baseUrl}/api/orders/${order.id}/payment-reported`, "POST", {}, customerCookie);
   assert.equal(paymentReport.status, 200);
@@ -631,9 +690,65 @@ test("sends Brevo welcome, order, and admin status emails", async t => {
     action: "confirm_payment"
   }, adminCookie);
   assert.equal(statusChange.status, 200);
-  assert.equal(sentEmails.length, 3);
-  assert.equal(sentEmails[2].options.body.to[0].email, "customer@example.com");
-  assert.match(sentEmails[2].options.body.subject, /Payment confirmed/);
+  assert.equal(sentEmails.length, 4);
+  assert.equal(sentEmails[3].options.body.to[0].email, "customer@example.com");
+  assert.match(sentEmails[3].options.body.subject, /Payment confirmed/);
+});
+
+test("sends new order notifications to the configured store email and phone numbers", async t => {
+  const sentEmails = [];
+  const sentSms = [];
+  const app = await createTestApp(t, {
+    orderNotificationEmail: "orders@example.com",
+    orderNotificationPhones: "08011111111, 08022222222, 08033333333",
+    brevoSmsSender: "AMGadget",
+    brevoOAuthClientId: "test-oauth-client",
+    brevoOAuthClientSecret: "test-oauth-secret",
+    brevoFetch: async (url, options) => {
+      if (url === "https://api.brevo.com/realms/partner/oauth/token") {
+        return new Response(JSON.stringify({ access_token: "test-sms-token", expires_in: 3600 }), { status: 200 });
+      }
+      if (url === "https://api.brevo.com/v3/transactionalSMS/send") {
+        sentSms.push(JSON.parse(options.body));
+        return new Response("{}", { status: 201 });
+      }
+      if (url === "https://api.brevo.com/v3/smtp/email") {
+        sentEmails.push(JSON.parse(options.body));
+        return new Response("{}", { status: 201 });
+      }
+      throw new Error(`Unexpected Brevo URL: ${url}`);
+    }
+  });
+  const baseUrl = await app.listen();
+
+  const registration = await jsonRequest(`${baseUrl}/api/auth/register`, "POST", {
+    name: "Test Customer",
+    email: "customer@example.com",
+    password: "customer-password",
+    phone: "+234 801 222 3344",
+    address: "123 Example Street, Abeokuta, Ogun State"
+  });
+  assert.equal(registration.status, 201);
+  const cookie = sessionCookie(registration);
+  const response = await jsonRequest(`${baseUrl}/api/orders`, "POST", {
+    items: [{ id: "volt-one-ultra", quantity: 1 }],
+    name: "Test Recipient",
+    phone: "+234 801 222 3344",
+    address: "123 Example Street, Abeokuta, Ogun State"
+  }, cookie);
+  assert.equal(response.status, 201);
+  const { order } = await response.json();
+
+  const storeEmail = sentEmails.find(email => email.to[0].email === "orders@example.com");
+  assert.ok(storeEmail);
+  assert.match(storeEmail.subject, new RegExp(order.id.slice(0, 8)));
+  assert.ok(storeEmail.textContent.includes(order.recipientPhone));
+  assert.deepEqual(sentSms.map(message => message.recipient), [
+    "2348011111111",
+    "2348022222222",
+    "2348033333333"
+  ]);
+  assert.ok(sentSms.every(message => message.content.includes(order.id.slice(0, 8))));
 });
 
 test("keeps customer, rider, and admin sessions after restarts until logout", async t => {

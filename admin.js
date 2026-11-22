@@ -538,7 +538,8 @@ function renderOrderDetail(order) {
   });
   if (order.riderName) {
     const assignment = document.createElement("span");
-    assignment.textContent = `Assigned rider: ${order.riderName}${order.riderEmail ? ` (${order.riderEmail})` : ""}`;
+    const label = order.status === "delivered" ? "Delivered by" : "Assigned rider";
+    assignment.textContent = `${label}: ${order.riderName}${order.riderEmail ? ` (${order.riderEmail})` : ""}`;
     customer.append(assignment);
   }
   orderDetailContent.append(customer);

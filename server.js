@@ -29,6 +29,13 @@ const contentTypes = {
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".webp": "image/webp"
 };
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; manifest-src 'self'; worker-src 'self'"
+};
 const defaultProducts = [
   { id: "volt-one-ultra", name: "Volt One Ultra", category: "Smartphones", description: "A premium everyday phone with a vivid display, a versatile camera system, and fast performance for work and entertainment.", price: 899, oldPrice: 999, type: "phone", image: "/images/products/phone.jpg", stock: 12, badge: "New" },
   { id: "voltbook-air-14", name: "VoltBook Air 14", category: "Laptops", description: "A slim, lightweight laptop made for moving between work, study, and travel, with a bright screen and all-day productivity in mind.", price: 1299, oldPrice: null, type: "laptop", image: "/images/products/laptop.jpg", stock: 8, badge: "Bestseller" },
@@ -215,6 +222,11 @@ function createServer(options = {}) {
     : null);
   const adminEmail = String(options.adminEmail ?? process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
   const adminPassword = String(options.adminPassword ?? process.env.ADMIN_PASSWORD ?? "");
+  const orderNotificationEmail = String(options.orderNotificationEmail ?? process.env.ORDER_NOTIFICATION_EMAIL ?? "").trim().toLowerCase() || adminEmail;
+  const orderNotificationPhones = [...new Set(String(options.orderNotificationPhones ?? process.env.ORDER_NOTIFICATION_PHONES ?? "")
+    .split(",")
+    .map(phone => phone.trim())
+    .filter(Boolean))];
   const secureCookies = options.secureCookies ?? (process.env.NODE_ENV === "production");
   const brevoApiKey = String(options.brevoApiKey ?? process.env.BREVO_API_KEY ?? "").trim();
   const brevoSenderEmail = String(options.brevoSenderEmail ?? process.env.BREVO_SENDER_EMAIL ?? "").trim();
@@ -252,8 +264,59 @@ function createServer(options = {}) {
   const deliveryPerKm = deliveryAmount("deliveryPerKm", "DELIVERY_PER_KM_NGN", 35);
   const minimumDeliveryFee = deliveryAmount("minimumDeliveryFee", "DELIVERY_MINIMUM_NGN", 2500);
   const sessions = new Map();
+  const loginFailures = new Map();
+  const loginFailureLimit = 10;
+  const loginFailureWindowMs = 15 * 60 * 1000;
   let writeQueue = Promise.resolve();
   let sessionsLoadPromise;
+
+  function loginFailureKey(email) {
+    return crypto.createHash("sha256").update(String(email).trim().toLowerCase()).digest("hex");
+  }
+
+  function loginRetryAfter(email) {
+    const key = loginFailureKey(email);
+    const record = loginFailures.get(key);
+    if (!record) return 0;
+    if (record.resetAt <= Date.now()) {
+      loginFailures.delete(key);
+      return 0;
+    }
+    return record.count >= loginFailureLimit
+      ? Math.ceil((record.resetAt - Date.now()) / 1000)
+      : 0;
+  }
+
+  function recordLoginFailure(email) {
+    const now = Date.now();
+    const key = loginFailureKey(email);
+    let record = loginFailures.get(key);
+    if (!record || record.resetAt <= now) {
+      record = { count: 0, resetAt: now + loginFailureWindowMs };
+    }
+    record.count += 1;
+    loginFailures.delete(key);
+    loginFailures.set(key, record);
+    if (loginFailures.size > 10000) {
+      for (const [trackedKey, trackedRecord] of loginFailures) {
+        if (trackedRecord.resetAt <= now) loginFailures.delete(trackedKey);
+      }
+      while (loginFailures.size > 10000) loginFailures.delete(loginFailures.keys().next().value);
+    }
+  }
+
+  function clearLoginFailures(email) {
+    loginFailures.delete(loginFailureKey(email));
+  }
+
+  function rejectIfLoginLimited(response, email) {
+    const retryAfter = loginRetryAfter(email);
+    if (!retryAfter) return false;
+    jsonResponse(response, 429, { error: "Too many failed sign-in attempts. Try again later." }, {
+      "Retry-After": String(retryAfter)
+    });
+    return true;
+  }
 
   function getPaymentDetails() {
     if (!paymentBankName || !paymentAccountName || !paymentAccountNumber) {
@@ -466,7 +529,82 @@ function createServer(options = {}) {
     }
   }
 
-  async function notifyOrderStatusChanged(order) {
+  async function notifyStoreContacts(eventName, { subject, title, paragraphs, items = [], smsContent }) {
+    const notifications = [];
+    if (orderNotificationEmail) {
+      notifications.push(notifyCustomer(eventName, {
+        recipientEmail: orderNotificationEmail,
+        recipientName: "Store admin",
+        subject,
+        title,
+        items,
+        paragraphs
+      }));
+    }
+    orderNotificationPhones.forEach((recipientPhone, index) => {
+      notifications.push(sendBrevoSms({
+        recipientPhone,
+        content: String(smsContent).replace(/\s+/g, " ").trim().slice(0, 160)
+      }).catch(error => {
+        console.error(`Could not send ${eventName} SMS #${index + 1}:`, error.message);
+      }));
+    });
+    await Promise.all(notifications);
+  }
+
+  async function notifyStoreOfOrder(order) {
+    const orderNumber = order.id.slice(0, 8);
+    await notifyStoreContacts("new order", {
+      subject: `New order received: ${orderNumber}`,
+      title: "A new order has been placed",
+      items: order.items,
+      paragraphs: [
+        `Order number: ${order.id}.`,
+        `Customer: ${order.recipientName}.`,
+        `Phone: ${order.recipientPhone}.`,
+        `Delivery address: ${order.shippingAddress}.`,
+        `Payment status: ${order.paymentStatus}.`,
+        `Order total: ${emailCurrency(order.total)}.`
+      ],
+      smsContent: `New A&M Gadget order ${orderNumber}. Total ${emailCurrency(order.total)}. Check the admin dashboard for details.`
+    });
+  }
+
+  async function notifyStoreOfDelivery(order, deliveredBy) {
+    const orderNumber = order.id.slice(0, 8);
+    const riderName = String(deliveredBy || "Assigned rider").replace(/\s+/g, " ").trim();
+    await notifyStoreContacts("order delivered", {
+      subject: `Order delivered by ${riderName}: ${orderNumber}`,
+      title: "An order has been delivered",
+      items: order.items,
+      paragraphs: [
+        `Order number: ${order.id}.`,
+        `Delivered by: ${riderName}.`,
+        `Customer: ${order.recipientName}.`,
+        `Delivered at: ${order.deliveredAt || order.updatedAt}.`,
+        `Order total: ${emailCurrency(order.total)}.`,
+        `Rider commission: ${emailCurrency(order.riderCommission || 0)}.`
+      ],
+      smsContent: `Order ${orderNumber} delivered by ${riderName}. Total ${emailCurrency(order.total)}.`
+    });
+  }
+
+  async function notifyStoreOfPayout(payout, riderName) {
+    const safeRiderName = String(riderName || "Rider").replace(/\s+/g, " ").trim();
+    await notifyStoreContacts("rider payout request", {
+      subject: `Payout request from ${safeRiderName}: ${emailCurrency(payout.amount)}`,
+      title: "Rider payout request",
+      paragraphs: [
+        `Rider: ${safeRiderName}.`,
+        `Amount requested: ${emailCurrency(payout.amount)}.`,
+        `Earnings week: ${payout.weekKey}.`,
+        "Review the rider's bank details in the admin dashboard."
+      ],
+      smsContent: `Payout request from ${safeRiderName}: ${emailCurrency(payout.amount)} for ${payout.weekKey}. Review the admin dashboard.`
+    });
+  }
+
+  async function notifyOrderStatusChanged(order, deliveredBy = "") {
     try {
       const users = await readStore("users.json", []);
       const customer = users.find(user => user.id === order.userId);
@@ -483,17 +621,19 @@ function createServer(options = {}) {
         cancelled: "Cancelled"
       };
       const status = statusLabels[order.status] || order.status;
+      const paragraphs = [
+        `Order ${order.id} is now ${status}.`,
+        `Payment status: ${order.paymentStatus || "Awaiting payment"}.`,
+        `Order total: ${emailCurrency(order.total)}.`
+      ];
+      if (order.status === "delivered" && deliveredBy) paragraphs.push(`Delivered by: ${deliveredBy}.`);
       await notifyCustomer("order status", {
         recipientEmail: customer.email,
         recipientName: customer.name,
         subject: `Order ${order.id.slice(0, 8)} update: ${status}`,
         title: "Your order has been updated",
         items: order.items,
-        paragraphs: [
-          `Order ${order.id} is now ${status}.`,
-          `Payment status: ${order.paymentStatus || "Awaiting payment"}.`,
-          `Order total: ${emailCurrency(order.total)}.`
-        ]
+        paragraphs
       });
     } catch (error) {
       console.error("Could not prepare the Brevo order status email:", error.message);
@@ -851,6 +991,11 @@ function createServer(options = {}) {
   function sessionCookie(token, request) {
     const secure = request.socket.encrypted || secureCookies ? "; Secure" : "";
     return `sid=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${sessionCookieLifetime}${secure}`;
+  }
+
+  function expiredSessionCookie(request) {
+    const secure = request.socket.encrypted || secureCookies ? "; Secure" : "";
+    return `sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`;
   }
 
   async function createSession(response, request, user) {
@@ -1266,20 +1411,23 @@ function createServer(options = {}) {
         orders.push(order);
       });
       const itemSummary = order.items.map(item => `${item.quantity} × ${item.name}: ${emailCurrency(item.price * item.quantity)}`);
-      await notifyCustomer("order placed", {
-        recipientEmail: session.user.email,
-        recipientName: recipientName,
-        subject: `We received your order ${order.id.slice(0, 8)}`,
-        title: "Your order has been received",
-        items: order.items,
-        paragraphs: [
-          `Thank you for your order. Your order number is ${order.id}.`,
-          ...itemSummary,
-          `Delivery address: ${shippingAddress}`,
-          `Order total: ${emailCurrency(order.total)}.`,
-          "We will email you when your order status changes."
-        ]
-      });
+      await Promise.all([
+        notifyCustomer("order placed", {
+          recipientEmail: session.user.email,
+          recipientName: recipientName,
+          subject: `We received your order ${order.id.slice(0, 8)}`,
+          title: "Your order has been received",
+          items: order.items,
+          paragraphs: [
+            `Thank you for your order. Your order number is ${order.id}.`,
+            ...itemSummary,
+            `Delivery address: ${shippingAddress}`,
+            `Order total: ${emailCurrency(order.total)}.`,
+            "We will email you when your order status changes."
+          ]
+        }),
+        notifyStoreOfOrder(order)
+      ]);
       jsonResponse(response, 201, { order, paymentDetails });
       return;
     }
@@ -1398,15 +1546,18 @@ function createServer(options = {}) {
       const body = await readRequestBody(request);
       const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
       const password = typeof body.password === "string" ? body.password : "";
+      if (rejectIfLoginLimited(response, email)) return;
       const users = await readStore("users.json", []);
       const existing = users.find(user => user.email === email);
       const candidate = existing
         ? (await scrypt(password, Buffer.from(existing.salt, "hex"), 64)).toString("hex")
         : "";
       if (!existing || !safeEqual(candidate, existing.passwordHash)) {
+        recordLoginFailure(email);
         jsonResponse(response, 401, { error: "Email or password is incorrect." });
         return;
       }
+      clearLoginFailures(email);
       const user = { ...existing, role: "customer" };
       await createSession(response, request, user);
       jsonResponse(response, 200, { user: userDetails({ user }) });
@@ -1503,15 +1654,18 @@ function createServer(options = {}) {
       const body = await readRequestBody(request);
       const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
       const password = typeof body.password === "string" ? body.password : "";
+      if (rejectIfLoginLimited(response, email)) return;
       const riders = await readStore("riders.json", []);
       const existing = riders.find(rider => rider.email === email);
       const candidate = existing
         ? (await scrypt(password, Buffer.from(existing.salt, "hex"), 64)).toString("hex")
         : "";
       if (!existing || !safeEqual(candidate, existing.passwordHash)) {
+        recordLoginFailure(email);
         jsonResponse(response, 401, { error: "Email or password is incorrect." });
         return;
       }
+      clearLoginFailures(email);
       if (existing.status !== "active") {
         jsonResponse(response, 403, {
           error: existing.status === "rejected"
@@ -1735,7 +1889,10 @@ function createServer(options = {}) {
         jsonResponse(response, 400, verified);
         return;
       }
-      await notifyOrderStatusChanged(verified.order);
+      await Promise.all([
+        notifyOrderStatusChanged(verified.order, session.user.name),
+        notifyStoreOfDelivery(verified.order, session.user.name)
+      ]);
       jsonResponse(response, 200, {
         order: {
           id: verified.order.id,
@@ -1785,18 +1942,7 @@ function createServer(options = {}) {
         requests.push(created);
         return created;
       });
-      if (adminEmail) {
-        await notifyCustomer("new rider payout request", {
-          recipientEmail: adminEmail,
-          recipientName: "Store admin",
-          subject: `Weekly rider payout request: ${emailCurrency(payout.amount)}`,
-          title: "Rider payout request",
-          paragraphs: [
-            `A rider has requested ${emailCurrency(payout.amount)} for ${payout.weekKey}.`,
-            "Sign in to the admin dashboard and review the Payouts section."
-          ]
-        });
-      }
+      await notifyStoreOfPayout(payout, session.user.name);
       jsonResponse(response, 201, {
         payoutRequest: { id: payout.id, amount: payout.amount, status: payout.status, weekKey: payout.weekKey }
       });
@@ -1811,10 +1957,13 @@ function createServer(options = {}) {
       const body = await readRequestBody(request);
       const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
       const password = typeof body.password === "string" ? body.password : "";
+      if (rejectIfLoginLimited(response, email)) return;
       if (!safeEqual(email, adminEmail) || !safeEqual(password, adminPassword)) {
+        recordLoginFailure(email);
         jsonResponse(response, 401, { error: "Email or password is incorrect." });
         return;
       }
+      clearLoginFailures(email);
       const user = { id: "admin", name: "Store admin", email: adminEmail, role: "admin" };
       await createSession(response, request, user);
       jsonResponse(response, 200, { user });
@@ -1824,7 +1973,7 @@ function createServer(options = {}) {
     if (route === "POST /api/auth/logout") {
       const token = readCookies(request).sid;
       if (token && sessions.delete(sessionTokenHash(token))) await persistSessions();
-      response.setHeader("Set-Cookie", `sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${request.socket.encrypted ? "; Secure" : ""}`);
+      response.setHeader("Set-Cookie", expiredSessionCookie(request));
       jsonResponse(response, 200, { user: null });
       return;
     }
@@ -1929,8 +2078,22 @@ function createServer(options = {}) {
 
   return http.createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
+    Object.entries(securityHeaders).forEach(([name, value]) => response.setHeader(name, value));
+    if (secureCookies) response.setHeader("Strict-Transport-Security", "max-age=31536000");
     try {
       if (url.pathname.startsWith("/api/")) {
+        if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && request.headers.origin) {
+          let origin;
+          try {
+            origin = new URL(request.headers.origin);
+          } catch {
+            origin = null;
+          }
+          if (!origin || origin.host.toLowerCase() !== String(request.headers.host || "").toLowerCase()) {
+            jsonResponse(response, 403, { error: "Cross-origin requests are not allowed." });
+            return;
+          }
+        }
         await loadSessions();
         await api(request, response, url);
       } else {
