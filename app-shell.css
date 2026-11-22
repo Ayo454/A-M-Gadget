@@ -24,6 +24,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .app-brand strong { font-size:14px; letter-spacing:-.03em; }
 .app-brand small { color:var(--app-muted); font-size:10px; }
 .app-topbar-status { flex:1; margin:0; color:var(--app-muted); font-size:10px; text-align:right; }
+.app-topbar-status.install-help { position:fixed; top:76px; left:16px; right:16px; z-index:80; max-width:560px; margin:0 auto; padding:12px 14px; overflow:visible; border:1px solid var(--app-line); border-radius:10px; background:white; color:var(--app-ink); box-shadow:0 10px 32px rgba(0,0,0,.15); font-size:13px; line-height:1.5; text-align:left; white-space:normal; }
 .app-install-button { min-height:36px; padding:0 13px; border:0; border-radius:8px; background:var(--app-dark); color:white; font-size:11px; font-weight:800; }
 .app-stage { width:min(1440px,100%); min-height:calc(100vh - 68px); margin:0 auto; padding:28px clamp(12px,3vw,38px) 36px; }
 .app-feedback { margin:0 auto 12px; color:#4e6424; font-size:12px; font-weight:700; }
@@ -188,6 +189,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .rider-app-topbar .app-brand { min-width:0; }
 .rider-app-topbar .app-brand strong { color:#f4f4f8; }
 .rider-app-topbar .app-topbar-status { color:#a0a1ae; text-align:left; }
+.rider-app-topbar .app-topbar-status.install-help { border-color:#2b2d38; background:#15161e; color:#f4f4f8; }
 .rider-app-topbar .app-install-button { background:var(--app-lime); color:#161710; }
 .rider-main { width:min(1320px,100%); min-height:calc(100vh - 68px); margin:0 auto; padding:26px clamp(12px,3vw,36px) 40px; }
 .rider-status { margin:0 auto 12px; color:var(--app-lime); font-size:11px; font-weight:800; }
@@ -320,6 +322,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .app-brand img { width:34px; height:34px; }
   .app-brand strong { font-size:12px; }
   .app-topbar-status { overflow:hidden; font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+  .app-topbar-status.install-help { top:66px; left:10px; right:10px; font-size:13px; }
   .app-install-button { min-height:32px; padding:0 9px; font-size:9px; }
   .app-stage { min-height:calc(100vh - 58px); padding:14px 10px 26px; }
   .app-auth-overlay { align-items:start; padding:10px; }

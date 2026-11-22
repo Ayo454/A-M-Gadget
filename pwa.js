@@ -2,44 +2,64 @@ const installAppButton = document.querySelector("[data-install-app]");
 const pwaStatus = document.querySelector("[data-pwa-status]");
 let deferredInstallPrompt = null;
 
+function setPwaStatus(message, showInstallHelp = false) {
+  if (!pwaStatus) return;
+  pwaStatus.textContent = message;
+  pwaStatus.classList.toggle("install-help", showInstallHelp);
+}
+
 if ("serviceWorker" in navigator && window.isSecureContext) {
   navigator.serviceWorker.register("/service-worker.js").catch(error => {
     console.error("Could not register the app service worker:", error);
-    if (pwaStatus) pwaStatus.textContent = "Offline app support could not be enabled. Check your connection and reload.";
+    setPwaStatus("Offline app support could not be enabled. Check your connection and reload.");
   });
 }
 
 if (installAppButton) {
-  installAppButton.hidden = false;
+  const isStandalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+    navigator.standalone === true;
+  const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  installAppButton.hidden = isStandalone;
+  if (isStandalone) setPwaStatus("App is installed.");
+
   window.addEventListener("beforeinstallprompt", event => {
+    if (isStandalone) return;
     event.preventDefault();
     deferredInstallPrompt = event;
-    if (pwaStatus) pwaStatus.textContent = "Install is ready. Click Install app to continue.";
+    setPwaStatus("Install is ready. Click Install app to continue.");
   });
 
   installAppButton.addEventListener("click", async () => {
     if (!deferredInstallPrompt) {
-      if (pwaStatus) {
-        pwaStatus.textContent = /iPhone|iPad|iPod/i.test(navigator.userAgent)
-          ? "To install, tap Share in Safari, then choose Add to Home Screen."
-          : "To install, open your browser menu and choose Install app or Add to Home Screen.";
-      }
+      setPwaStatus(
+        isAppleMobile
+          ? "On iPhone or iPad, open this page in Safari, tap Share, then tap Add to Home Screen."
+          : "Open your browser menu and choose Install app or Add to Home Screen.",
+        true
+      );
       return;
     }
-    deferredInstallPrompt.prompt();
-    const choice = await deferredInstallPrompt.userChoice;
+    const installPrompt = deferredInstallPrompt;
     deferredInstallPrompt = null;
-    installAppButton.hidden = true;
-    if (pwaStatus) {
-      pwaStatus.textContent = choice.outcome === "accepted"
-        ? "App installation started."
-        : "You can install the app later from your browser menu.";
+    try {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      if (choice.outcome === "accepted") {
+        installAppButton.hidden = true;
+        setPwaStatus("App installation started.");
+      } else {
+        setPwaStatus("Installation was canceled. You can try again from your browser menu.");
+      }
+    } catch (error) {
+      console.error("Could not open the app install prompt:", error);
+      setPwaStatus("Your browser could not open installation. Use its menu to install the app.");
     }
   });
 
   window.addEventListener("appinstalled", () => {
     installAppButton.hidden = true;
     deferredInstallPrompt = null;
-    if (pwaStatus) pwaStatus.textContent = "App installed successfully.";
+    setPwaStatus("App installed successfully.");
   });
 }

@@ -93,12 +93,16 @@ test("serves the store and keeps the data files private", async t => {
   assert.equal(oldRiderPage.status, 200);
   const shopAppRoute = await fetch(`${baseUrl}/app`);
   assert.equal(shopAppRoute.status, 200);
-  assert.match(await shopAppRoute.text(), /app.webmanifest/);
+  const shopAppHtml = await shopAppRoute.text();
+  assert.match(shopAppHtml, /app.webmanifest/);
+  assert.match(shopAppHtml, /apple-mobile-web-app-capable/);
   for (const manifestPath of ["/app.webmanifest", "/rider.webmanifest"]) {
     const manifestResponse = await fetch(`${baseUrl}${manifestPath}`);
     assert.equal(manifestResponse.status, 200);
     assert.match(manifestResponse.headers.get("content-type"), /application\/manifest\+json/);
-    assert.equal(typeof (await manifestResponse.json()).start_url, "string");
+    const manifest = await manifestResponse.json();
+    assert.equal(typeof manifest.start_url, "string");
+    assert.equal(manifest.display, "standalone");
   }
   const announcementScript = await fetch(`${baseUrl}/announcement.js`);
   assert.equal(announcementScript.status, 200);
