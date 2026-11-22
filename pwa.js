@@ -14,6 +14,7 @@ if (installAppButton) {
   window.addEventListener("beforeinstallprompt", event => {
     event.preventDefault();
     deferredInstallPrompt = event;
+    if (pwaStatus) pwaStatus.textContent = "Install is ready. Click Install app to continue.";
   });
 
   installAppButton.addEventListener("click", async () => {

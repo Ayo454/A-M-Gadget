@@ -35,6 +35,7 @@
             <button type="button" class="active" id="appShowLogin" role="tab" aria-selected="true">Sign in</button>
             <button type="button" id="appShowRegister" role="tab" aria-selected="false">Create account</button>
           </div>
+          <p class="app-auth-feedback" id="appAuthFeedback" role="status" aria-live="polite"></p>
           <form class="app-form" id="appLoginForm">
             <label>Email address<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
             <label>Password<input name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required></label>
@@ -93,6 +94,7 @@
           <div class="app-category-list" id="appCategories" aria-label="Filter products by category"></div>
           <div class="app-section-heading app-top-picks-heading" id="appTopPicks"><div><span class="app-kicker">CURATED FOR YOU</span><h2>Top picks</h2></div></div>
           <div class="app-product-grid" id="appProductGrid" aria-live="polite"></div>
+          <nav class="app-pagination" id="appPagination" aria-label="Product pages"></nav>
         </section>
 
         <section class="app-panel" data-app-panel="orders" hidden>

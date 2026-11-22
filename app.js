@@ -9,11 +9,13 @@ const appPaymentConfirmation = document.querySelector("#appPaymentConfirmation")
 const appLoginForm = document.querySelector("#appLoginForm");
 const appRegisterForm = document.querySelector("#appRegisterForm");
 const appCartStorageKey = "a-m-gadget-app-cart";
+const appProductsPerPage = 8;
 let appUser = null;
 let appProducts = [];
 let appProductsLoaded = false;
 let appCart = [];
 let selectedCategory = "All";
+let appCurrentPage = 1;
 let quoteVersion = 0;
 let activeQuoteKey = "";
 let paymentOrderId = "";
@@ -30,13 +32,23 @@ async function appRequest(url, options = {}) {
   } catch {
     throw new Error("The app could not read the server response. Try again.");
   }
-  if (!response.ok) throw new Error(result.error || "The request could not be completed.");
+  if (!response.ok) {
+    const error = new Error(result.error || "The request could not be completed.");
+    error.status = response.status;
+    throw error;
+  }
   return result;
 }
 
 function setAppFeedback(message, isError = false) {
   appFeedback.textContent = message;
   appFeedback.classList.toggle("error", isError);
+}
+
+function setAuthFeedback(message, isError = false) {
+  const feedback = document.querySelector("#appAuthFeedback");
+  feedback.textContent = message;
+  feedback.classList.toggle("error", isError);
 }
 
 function setCheckoutFeedback(message, isError = false) {
@@ -78,6 +90,7 @@ function setAuthMode(mode) {
   document.querySelector("#appShowRegister").classList.toggle("active", registering);
   document.querySelector("#appShowLogin").setAttribute("aria-selected", String(!registering));
   document.querySelector("#appShowRegister").setAttribute("aria-selected", String(registering));
+  setAuthFeedback("");
 }
 
 function openAuth(mode = "login") {
@@ -231,6 +244,7 @@ function renderCategories() {
     button.append(icon, label);
     button.addEventListener("click", () => {
       selectedCategory = category;
+      appCurrentPage = 1;
       renderCategories();
       renderProducts();
     });
@@ -246,6 +260,9 @@ function renderProducts() {
       `${product.name} ${product.category} ${product.description || ""}`.toLowerCase().includes(search);
     return matchesCategory && matchesSearch;
   });
+  const pageCount = Math.max(1, Math.ceil(filtered.length / appProductsPerPage));
+  appCurrentPage = Math.min(appCurrentPage, pageCount);
+  renderProductPagination(filtered.length, pageCount);
   appProductGrid.replaceChildren();
   if (!filtered.length) {
     const empty = document.createElement("p");
@@ -254,7 +271,8 @@ function renderProducts() {
     appProductGrid.append(empty);
     return;
   }
-  filtered.forEach(product => {
+  const firstProductIndex = (appCurrentPage - 1) * appProductsPerPage;
+  filtered.slice(firstProductIndex, firstProductIndex + appProductsPerPage).forEach(product => {
     const card = document.createElement("article");
     const imageWrap = document.createElement("div");
     const image = document.createElement("img");
@@ -305,6 +323,64 @@ function renderProducts() {
     card.append(imageWrap, details);
     appProductGrid.append(card);
   });
+}
+
+function renderProductPagination(productCount, pageCount) {
+  const pagination = document.querySelector("#appPagination");
+  pagination.replaceChildren();
+  pagination.hidden = productCount === 0;
+  if (!productCount) return;
+
+  const summary = document.createElement("span");
+  const controls = document.createElement("div");
+  const firstProduct = (appCurrentPage - 1) * appProductsPerPage + 1;
+  const lastProduct = Math.min(appCurrentPage * appProductsPerPage, productCount);
+  summary.className = "app-pagination-summary";
+  summary.setAttribute("aria-live", "polite");
+  summary.textContent = `Showing ${firstProduct}–${lastProduct} of ${productCount} gadgets`;
+  controls.className = "app-pagination-controls";
+
+  const addPageButton = (page, label = String(page), current = false) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `app-page-button ${current ? "active" : ""}`;
+    button.textContent = label;
+    button.setAttribute("aria-label", label === "Previous" || label === "Next" ? label : `Page ${page}`);
+    if (current) button.setAttribute("aria-current", "page");
+    button.disabled = current || label === "Previous" && appCurrentPage === 1 ||
+      label === "Next" && appCurrentPage === pageCount;
+    button.addEventListener("click", () => {
+      appCurrentPage = page;
+      renderProducts();
+      document.querySelector("#appTopPicks").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    controls.append(button);
+  };
+  const addEllipsis = () => {
+    const ellipsis = document.createElement("span");
+    ellipsis.className = "app-page-ellipsis";
+    ellipsis.setAttribute("aria-hidden", "true");
+    ellipsis.textContent = "…";
+    controls.append(ellipsis);
+  };
+
+  addPageButton(Math.max(1, appCurrentPage - 1), "Previous");
+  let visiblePages;
+  if (pageCount <= 7) {
+    visiblePages = Array.from({ length: pageCount }, (_, index) => index + 1);
+  } else if (appCurrentPage <= 4) {
+    visiblePages = [1, 2, 3, 4, 5, "ellipsis", pageCount];
+  } else if (appCurrentPage >= pageCount - 3) {
+    visiblePages = [1, "ellipsis", pageCount - 4, pageCount - 3, pageCount - 2, pageCount - 1, pageCount];
+  } else {
+    visiblePages = [1, "ellipsis", appCurrentPage - 1, appCurrentPage, appCurrentPage + 1, "ellipsis", pageCount];
+  }
+  visiblePages.forEach(page => {
+    if (page === "ellipsis") addEllipsis();
+    else addPageButton(page, String(page), page === appCurrentPage);
+  });
+  addPageButton(Math.min(pageCount, appCurrentPage + 1), "Next");
+  pagination.append(summary, controls);
 }
 
 async function loadProducts() {
@@ -504,7 +580,7 @@ async function openCheckout() {
   if (!appUser) {
     closeCart();
     openAuth("login");
-    setAppFeedback("Sign in or create an account to place your order.");
+    setAuthFeedback("Sign in or create an account to place your order.");
     return;
   }
   closeCart();
@@ -545,9 +621,9 @@ appLoginForm.addEventListener("submit", async event => {
     if (!result.user || result.user.role !== "customer") throw new Error("This sign-in is not a customer account.");
     await setAppUser(result.user);
     appLoginForm.reset();
-    setAppFeedback("");
+    setAuthFeedback("");
   } catch (error) {
-    setAppFeedback(error.message, true);
+    setAuthFeedback(error.message, true);
   } finally {
     button.disabled = false;
   }
@@ -566,7 +642,10 @@ appRegisterForm.addEventListener("submit", async event => {
     appRegisterForm.reset();
     setAppFeedback("Your customer account is ready.");
   } catch (error) {
-    setAppFeedback(error.message, true);
+    const message = error.status === 409
+      ? "An account with this email already exists. Sign in with that account instead."
+      : error.message;
+    setAuthFeedback(message, true);
   } finally {
     button.disabled = false;
   }
@@ -585,7 +664,10 @@ document.querySelectorAll("[data-app-view]").forEach(button => {
 document.querySelector("[data-scroll-products]").addEventListener("click", () => {
   document.querySelector("#appTopPicks").scrollIntoView({ behavior: "smooth", block: "start" });
 });
-document.querySelector("#appSearch").addEventListener("input", renderProducts);
+document.querySelector("#appSearch").addEventListener("input", () => {
+  appCurrentPage = 1;
+  renderProducts();
+});
 appProductGrid.addEventListener("click", event => {
   const button = event.target.closest("[data-add-product]");
   if (button) {

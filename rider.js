@@ -16,7 +16,11 @@ async function riderRequest(path, options = {}) {
   } catch {
     throw new Error(`The rider server returned an unexpected page (HTTP ${response.status}). Refresh or ask the store to update the hosted app.`);
   }
-  if (!response.ok) throw new Error(result.error || "The request could not be completed.");
+  if (!response.ok) {
+    const error = new Error(result.error || "The request could not be completed.");
+    error.status = response.status;
+    throw error;
+  }
   return result;
 }
 
@@ -306,7 +310,10 @@ riderRegisterForm.addEventListener("submit", async event => {
     setRiderMode("login");
     showRiderStatus(result.message || "Application received. We will email you after review.");
   } catch (error) {
-    showRiderStatus(error.message, true);
+    const message = error.status === 409
+      ? "An account with this email already exists. If you already applied as a rider, choose Sign in; otherwise use a different email address."
+      : error.message;
+    showRiderStatus(message, true);
   } finally {
     submitButton.disabled = false;
   }
