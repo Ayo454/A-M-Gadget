@@ -1,0 +1,30 @@
+.app-launch-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: #111118;
+  color: #f4f4f8;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity .28s ease, visibility .28s ease;
+}
+
+.app-launch-screen[hidden] { display: none; }
+.app-launch-screen.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.app-launch-mark { width: 70px; height: 70px; display: grid; place-items: center; border-radius: 21px; background: #d8ff62; color: #111118; font: 800 17px "Segoe UI", Arial, sans-serif; }
+.app-launch-spinner { width: 28px; height: 28px; border: 3px solid rgba(216,255,98,.24); border-top-color: #d8ff62; border-radius: 50%; animation: app-launch-spin .85s linear infinite; }
+.app-launch-screen p { margin: 0; color: #c6c6ce; font: 700 12px "Segoe UI", Arial, sans-serif; letter-spacing: .04em; }
+
+@keyframes app-launch-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-launch-screen { transition: none; }
+  .app-launch-spinner { animation: none; }
+}

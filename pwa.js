@@ -1,11 +1,38 @@
 const installAppButton = document.querySelector("[data-install-app]");
 const pwaStatus = document.querySelector("[data-pwa-status]");
+const appLaunchScreen = document.querySelector("[data-app-loader]");
 let deferredInstallPrompt = null;
 
 function setPwaStatus(message, showInstallHelp = false) {
   if (!pwaStatus) return;
   pwaStatus.textContent = message;
   pwaStatus.classList.toggle("install-help", showInstallHelp);
+}
+
+if (appLaunchScreen) {
+  const minimumVisibleMs = 500;
+  const startedAt = Date.now();
+  let hideScheduled = false;
+  let loadFallback;
+
+  function hideAppLaunchScreen() {
+    if (hideScheduled) return;
+    hideScheduled = true;
+    window.clearTimeout(loadFallback);
+    const remainingMs = Math.max(0, minimumVisibleMs - (Date.now() - startedAt));
+    window.setTimeout(() => {
+      appLaunchScreen.classList.add("is-hidden");
+      const finishHiding = () => {
+        appLaunchScreen.hidden = true;
+      };
+      appLaunchScreen.addEventListener("transitionend", finishHiding, { once: true });
+      window.setTimeout(finishHiding, 350);
+    }, remainingMs);
+  }
+
+  loadFallback = window.setTimeout(hideAppLaunchScreen, 8000);
+  if (document.readyState === "complete") hideAppLaunchScreen();
+  else window.addEventListener("load", hideAppLaunchScreen, { once: true });
 }
 
 if ("serviceWorker" in navigator && window.isSecureContext) {

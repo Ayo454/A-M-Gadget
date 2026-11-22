@@ -1,4 +1,4 @@
-const CACHE_NAME = "am-gadget-app-shell-v3";
+const CACHE_NAME = "am-gadget-app-shell-v4";
 const APP_SHELL = [
   "/app.html",
   "/rider.app.html",
@@ -12,6 +12,7 @@ const APP_SHELL = [
   "/rider.js",
   "/admin.js",
   "/pwa.js",
+  "/app-loader.css",
   "/app-icon.svg",
   "/rider-icon.svg"
 ];
@@ -23,6 +24,7 @@ const STATIC_ASSETS = new Set([
   "/rider.js",
   "/admin.js",
   "/pwa.js",
+  "/app-loader.css",
   "/app-icon.svg",
   "/rider-icon.svg",
   "/app.webmanifest",

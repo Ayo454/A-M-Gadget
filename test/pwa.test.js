@@ -6,11 +6,17 @@ const { test } = require("node:test");
 
 const pwaScriptPath = path.join(__dirname, "..", "pwa.js");
 
-async function createPwaHarness({ userAgent = "Android", standalone = false } = {}) {
+async function createPwaHarness({
+  userAgent = "Android",
+  standalone = false,
+  withLoader = false,
+  readyState = "complete"
+} = {}) {
   const source = await fs.readFile(pwaScriptPath, "utf8");
   const windowListeners = new Map();
   const buttonListeners = new Map();
   const statusClasses = new Set();
+  const loaderClasses = new Set();
   const installButton = {
     hidden: true,
     addEventListener: (name, listener) => buttonListeners.set(name, listener)
@@ -24,10 +30,21 @@ async function createPwaHarness({ userAgent = "Android", standalone = false } = 
       }
     }
   };
+  const launchScreen = withLoader ? {
+    hidden: false,
+    classList: {
+      add(name) {
+        loaderClasses.add(name);
+      }
+    },
+    addEventListener() {}
+  } : null;
   const window = {
     isSecureContext: true,
     matchMedia: () => ({ matches: standalone }),
-    addEventListener: (name, listener) => windowListeners.set(name, listener)
+    addEventListener: (name, listener) => windowListeners.set(name, listener),
+    setTimeout,
+    clearTimeout
   };
   const navigator = {
     platform: "Linux",
@@ -35,13 +52,17 @@ async function createPwaHarness({ userAgent = "Android", standalone = false } = 
     userAgent
   };
   const document = {
+    readyState,
     querySelector(selector) {
-      return selector === "[data-install-app]" ? installButton : status;
+      if (selector === "[data-install-app]") return installButton;
+      if (selector === "[data-pwa-status]") return status;
+      if (selector === "[data-app-loader]") return launchScreen;
+      return null;
     }
   };
 
   vm.runInNewContext(source, { document, navigator, window, console });
-  return { buttonListeners, installButton, status, statusClasses, windowListeners };
+  return { buttonListeners, installButton, launchScreen, loaderClasses, status, statusClasses, windowListeners };
 }
 
 function installPrompt(outcome) {
@@ -85,4 +106,13 @@ test("shows iPhone installation steps and hides the button when already installe
   const installed = await createPwaHarness({ standalone: true });
   assert.equal(installed.installButton.hidden, true);
   assert.match(installed.status.textContent, /App is installed/);
+});
+
+test("keeps the launch screen until page load and fades it away", async () => {
+  const app = await createPwaHarness({ withLoader: true, readyState: "loading" });
+  assert.equal(app.launchScreen.hidden, false);
+  app.windowListeners.get("load")();
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  assert.equal(app.loaderClasses.has("is-hidden"), true);
+  assert.equal(app.launchScreen.hidden, true);
 });

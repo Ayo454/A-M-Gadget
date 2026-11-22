@@ -10,10 +10,16 @@
   <title>A&amp;M Gadget Rider App</title>
   <link rel="manifest" href="/rider.webmanifest">
   <link rel="icon" href="/rider-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app-loader.css">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/app-shell.css">
 </head>
 <body class="rider-portal">
+  <div class="app-launch-screen" data-app-loader role="status" aria-live="polite">
+    <span class="app-launch-mark" aria-hidden="true">A&amp;M</span>
+    <span class="app-launch-spinner" aria-hidden="true"></span>
+    <p>Loading the rider app...</p>
+  </div>
   <header class="app-topbar rider-app-topbar">
     <div class="app-brand">
       <img src="/rider-icon.svg" alt="" width="38" height="38">

@@ -13,8 +13,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="/app-loader.css">
 </head>
 <body class="admin-body">
+  <div class="app-launch-screen" data-app-loader role="status" aria-live="polite">
+    <span class="app-launch-mark" aria-hidden="true">A&amp;M</span>
+    <span class="app-launch-spinner" aria-hidden="true"></span>
+    <p>Loading the admin dashboard...</p>
+  </div>
   <header class="admin-topbar">
     <a class="admin-brand" href="index.html" aria-label="A&amp;M Gadget storefront">
       <span class="admin-brand-mark">A&amp;M</span>

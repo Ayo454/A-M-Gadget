@@ -90,6 +90,7 @@ test("serves the store and keeps the data files private", async t => {
   assert.match(riderPageHtml, /Rider portal/);
   assert.doesNotMatch(riderPageHtml, /href="(?:index|admin)(?:\.html|\/|#)/);
   assert.match(riderPageHtml, /mobile-web-app-capable/);
+  assert.match(riderPageHtml, /data-app-loader/);
   const riderAppRoute = await fetch(`${baseUrl}/rider`);
   assert.equal(riderAppRoute.status, 200);
   assert.match(await riderAppRoute.text(), /data-install-app/);
@@ -99,6 +100,7 @@ test("serves the store and keeps the data files private", async t => {
   assert.equal(shopAppRoute.status, 200);
   const shopAppHtml = await shopAppRoute.text();
   assert.match(shopAppHtml, /app.webmanifest/);
+  assert.match(shopAppHtml, /data-app-loader/);
   assert.match(shopAppHtml, /mobile-web-app-capable/);
   assert.match(shopAppHtml, /apple-mobile-web-app-capable/);
   for (const manifestPath of ["/app.webmanifest", "/rider.webmanifest", "/admin.webmanifest"]) {
@@ -112,10 +114,14 @@ test("serves the store and keeps the data files private", async t => {
   }
   const announcementScript = await fetch(`${baseUrl}/announcement.js`);
   assert.equal(announcementScript.status, 200);
+  const appLoaderStyles = await fetch(`${baseUrl}/app-loader.css`);
+  assert.equal(appLoaderStyles.status, 200);
+  assert.match(appLoaderStyles.headers.get("content-type"), /text\/css/);
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
   const adminPageHtml = await adminPage.text();
   assert.match(adminPageHtml, /admin\.webmanifest/);
+  assert.match(adminPageHtml, /data-app-loader/);
   assert.match(adminPageHtml, /mobile-web-app-capable/);
   assert.match(adminPageHtml, /data-install-app/);
   assert.match(adminPageHtml, /src="pwa\.js"/);
