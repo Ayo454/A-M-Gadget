@@ -1,28 +1,33 @@
-const CACHE_NAME = "am-gadget-app-shell-v2";
+const CACHE_NAME = "am-gadget-app-shell-v3";
 const APP_SHELL = [
   "/app.html",
   "/rider.app.html",
+  "/admin",
   "/app.webmanifest",
   "/rider.webmanifest",
+  "/admin.webmanifest",
   "/app-shell.css",
   "/styles.css",
   "/app.js",
   "/rider.js",
+  "/admin.js",
   "/pwa.js",
   "/app-icon.svg",
   "/rider-icon.svg"
 ];
-const APP_PAGES = new Set(["/app", "/app.html", "/rider", "/rider.html", "/rider.app.html"]);
+const APP_PAGES = new Set(["/app", "/app.html", "/rider", "/rider.html", "/rider.app.html", "/admin", "/admin.html"]);
 const STATIC_ASSETS = new Set([
   "/app-shell.css",
   "/styles.css",
   "/app.js",
   "/rider.js",
+  "/admin.js",
   "/pwa.js",
   "/app-icon.svg",
   "/rider-icon.svg",
   "/app.webmanifest",
-  "/rider.webmanifest"
+  "/rider.webmanifest",
+  "/admin.webmanifest"
 ]);
 
 self.addEventListener("install", event => {

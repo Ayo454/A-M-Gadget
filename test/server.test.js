@@ -96,18 +96,23 @@ test("serves the store and keeps the data files private", async t => {
   const shopAppHtml = await shopAppRoute.text();
   assert.match(shopAppHtml, /app.webmanifest/);
   assert.match(shopAppHtml, /apple-mobile-web-app-capable/);
-  for (const manifestPath of ["/app.webmanifest", "/rider.webmanifest"]) {
+  for (const manifestPath of ["/app.webmanifest", "/rider.webmanifest", "/admin.webmanifest"]) {
     const manifestResponse = await fetch(`${baseUrl}${manifestPath}`);
     assert.equal(manifestResponse.status, 200);
     assert.match(manifestResponse.headers.get("content-type"), /application\/manifest\+json/);
     const manifest = await manifestResponse.json();
     assert.equal(typeof manifest.start_url, "string");
     assert.equal(manifest.display, "standalone");
+    if (manifestPath === "/admin.webmanifest") assert.equal(manifest.start_url, "/admin");
   }
   const announcementScript = await fetch(`${baseUrl}/announcement.js`);
   assert.equal(announcementScript.status, 200);
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
+  const adminPageHtml = await adminPage.text();
+  assert.match(adminPageHtml, /admin\.webmanifest/);
+  assert.match(adminPageHtml, /data-install-app/);
+  assert.match(adminPageHtml, /src="pwa\.js"/);
   const oldAdminPage = await fetch(`${baseUrl}/admin.html`, { redirect: "manual" });
   assert.equal(oldAdminPage.status, 308);
   assert.equal(oldAdminPage.headers.get("location"), "/admin");

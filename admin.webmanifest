@@ -1,0 +1,15 @@
+{
+  "id": "/admin",
+  "name": "A&M Gadget Admin",
+  "short_name": "A&M Admin",
+  "description": "Manage the A&M Gadget store.",
+  "start_url": "/admin",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f6f2",
+  "theme_color": "#0d0d12",
+  "icons": [
+    { "src": "/app-icon.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/app-icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
