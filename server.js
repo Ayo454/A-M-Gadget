@@ -195,9 +195,11 @@ function validateProduct(input) {
       } catch {
         throw Object.assign(new Error("Enter an image URL beginning with http:// or https://, or use a product image path."), { status: 400 });
       }
+      const isJpeg = /\.jpe?g$/i.test(imageUrl.pathname) || imageUrl.searchParams.get("fm") === "jpg";
+      const isGoogleThumbnail = imageUrl.hostname === "encrypted-tbn0.gstatic.com" && imageUrl.pathname === "/images";
       if (!["http:", "https:"].includes(imageUrl.protocol) || imageUrl.username || imageUrl.password ||
-          (!/\.jpe?g$/i.test(imageUrl.pathname) && imageUrl.searchParams.get("fm") !== "jpg")) {
-        throw Object.assign(new Error("Product images must use a public JPG or JPEG URL."), { status: 400 });
+          (!isJpeg && !isGoogleThumbnail)) {
+        throw Object.assign(new Error("Product images must be JPG/JPEG URLs or Google thumbnail URLs."), { status: 400 });
       }
       image = imageUrl.href;
     }

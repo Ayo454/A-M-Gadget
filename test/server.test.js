@@ -1036,13 +1036,15 @@ test("restricts product creation to the admin and persists added products", asyn
   const update = await jsonRequest(`${baseUrl}/api/admin/products/${createdProduct.id}`, "PUT", {
     ...product,
     name: "Updated Test Tablet",
-    price: "649.99"
+    price: "649.99",
+    image: "https://encrypted-tbn0.gstatic.com/images?test=thumbnail"
   }, cookie);
   assert.equal(update.status, 200);
   const updatedProduct = await update.json();
   assert.equal(updatedProduct.id, createdProduct.id);
   assert.equal(updatedProduct.name, "Updated Test Tablet");
   assert.equal(updatedProduct.price, 649.99);
+  assert.equal(updatedProduct.image, "https://encrypted-tbn0.gstatic.com/images?test=thumbnail");
 
   const deletion = await jsonRequest(`${baseUrl}/api/admin/products/${createdProduct.id}`, "DELETE", undefined, cookie);
   assert.equal(deletion.status, 200);
