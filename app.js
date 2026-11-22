@@ -67,6 +67,7 @@ function formatAppMoney(value) {
 }
 
 function showAppView(view) {
+  if (!appCheckoutOverlay.hidden) closeCheckout();
   if (view === "bag") {
     openCart();
     return;
@@ -601,7 +602,14 @@ async function openCheckout() {
   appCheckoutForm.elements.namedItem("address").value = appUser.address || "";
   paymentOrderId = "";
   appCheckoutOverlay.hidden = false;
+  document.body.classList.add("checkout-open");
   await updateCheckoutQuote();
+}
+
+function closeCheckout() {
+  appCheckoutOverlay.hidden = true;
+  document.body.classList.remove("checkout-open");
+  quoteVersion += 1;
 }
 
 function displayPaymentConfirmation(order, paymentDetails) {
@@ -695,13 +703,10 @@ document.querySelector("#appCartList").addEventListener("click", event => {
 });
 document.querySelector("#startCheckout").addEventListener("click", openCheckout);
 document.querySelectorAll("[data-close-checkout]").forEach(button => {
-  button.addEventListener("click", () => { appCheckoutOverlay.hidden = true; quoteVersion += 1; });
+  button.addEventListener("click", closeCheckout);
 });
 appCheckoutOverlay.addEventListener("click", event => {
-  if (event.target === appCheckoutOverlay) {
-    appCheckoutOverlay.hidden = true;
-    quoteVersion += 1;
-  }
+  if (event.target === appCheckoutOverlay) closeCheckout();
 });
 appCheckoutForm.elements.namedItem("address").addEventListener("input", () => {
   window.clearTimeout(quoteTimer);
@@ -750,7 +755,7 @@ document.querySelector("#reportAppPayment").addEventListener("click", async even
   }
 });
 document.querySelector("#finishCheckout").addEventListener("click", () => {
-  appCheckoutOverlay.hidden = true;
+  closeCheckout();
   showAppView("orders");
   setAppFeedback("Your order is saved. You can follow updates in My orders.");
 });

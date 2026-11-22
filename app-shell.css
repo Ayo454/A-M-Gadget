@@ -301,6 +301,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .app-mobile-nav button .app-mobile-nav-icon { position:relative; width:20px; display:grid; place-items:center; font-size:15px; }
   .app-mobile-nav button .app-mobile-cart-badge { position:absolute; top:-7px; right:-9px; min-width:15px; height:15px; display:grid; place-items:center; padding:0 3px; border:1px solid white; border-radius:20px; background:#e33c4c; color:white; font-size:8px; font-weight:900; line-height:1; }
   .app-mobile-nav button .app-mobile-cart-badge[hidden] { display:none; }
+  .checkout-open .app-mobile-nav { z-index:51; }
+  .checkout-open .app-checkout-sheet { padding-bottom:calc(88px + env(safe-area-inset-bottom)); }
   .app-mobile-nav button.active { background:#eff2e7; color:#37441e; }
   .app-main { padding-bottom:84px; }
   .rider-workspace { grid-template-columns:1fr; }
