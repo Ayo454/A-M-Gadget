@@ -6,5 +6,9 @@
     "start": "node server.js",
     "migrate:supabase": "node scripts/migrate-to-supabase.js",
     "test": "node --test"
+  },
+  "dependencies": {
+    "express-rate-limit": "^8.7.5",
+    "helmet": "^8.3.0"
   }
 }
