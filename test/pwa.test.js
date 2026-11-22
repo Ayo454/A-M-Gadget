@@ -6,13 +6,53 @@ const { test } = require("node:test");
 
 const pwaScriptPath = path.join(__dirname, "..", "pwa.js");
 
+function createFakeClock() {
+  let now = 0;
+  let nextTimerId = 0;
+  const timers = new Map();
+  const ClockDate = class extends Date {
+    static now() {
+      return now;
+    }
+  };
+  return {
+    Date: ClockDate,
+    setTimeout(callback, delay = 0) {
+      const id = ++nextTimerId;
+      timers.set(id, { callback, dueAt: now + delay });
+      return id;
+    },
+    clearTimeout(id) {
+      timers.delete(id);
+    },
+    advance(milliseconds) {
+      const target = now + milliseconds;
+      while (true) {
+        let nextTimer = null;
+        for (const [id, timer] of timers) {
+          if (timer.dueAt <= target && (!nextTimer || timer.dueAt < nextTimer.timer.dueAt)) {
+            nextTimer = { id, timer };
+          }
+        }
+        if (!nextTimer) break;
+        timers.delete(nextTimer.id);
+        now = nextTimer.timer.dueAt;
+        nextTimer.timer.callback();
+      }
+      now = target;
+    }
+  };
+}
+
 async function createPwaHarness({
   userAgent = "Android",
   standalone = false,
   withLoader = false,
-  readyState = "complete"
+  readyState = "complete",
+  fakeTimers = false
 } = {}) {
   const source = await fs.readFile(pwaScriptPath, "utf8");
+  const clock = fakeTimers ? createFakeClock() : null;
   const windowListeners = new Map();
   const buttonListeners = new Map();
   const statusClasses = new Set();
@@ -43,8 +83,8 @@ async function createPwaHarness({
     isSecureContext: true,
     matchMedia: () => ({ matches: standalone }),
     addEventListener: (name, listener) => windowListeners.set(name, listener),
-    setTimeout,
-    clearTimeout
+    setTimeout: clock ? clock.setTimeout.bind(clock) : setTimeout,
+    clearTimeout: clock ? clock.clearTimeout.bind(clock) : clearTimeout
   };
   const navigator = {
     platform: "Linux",
@@ -61,8 +101,17 @@ async function createPwaHarness({
     }
   };
 
-  vm.runInNewContext(source, { document, navigator, window, console });
-  return { buttonListeners, installButton, launchScreen, loaderClasses, status, statusClasses, windowListeners };
+  vm.runInNewContext(source, { Date: clock ? clock.Date : Date, document, navigator, window, console });
+  return {
+    advanceTime: clock ? clock.advance.bind(clock) : null,
+    buttonListeners,
+    installButton,
+    launchScreen,
+    loaderClasses,
+    status,
+    statusClasses,
+    windowListeners
+  };
 }
 
 function installPrompt(outcome) {
@@ -109,10 +158,14 @@ test("shows iPhone installation steps and hides the button when already installe
 });
 
 test("keeps the launch screen until page load and fades it away", async () => {
-  const app = await createPwaHarness({ withLoader: true, readyState: "loading" });
+  const app = await createPwaHarness({ withLoader: true, readyState: "loading", fakeTimers: true });
   assert.equal(app.launchScreen.hidden, false);
   app.windowListeners.get("load")();
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  app.advanceTime(19999);
+  assert.equal(app.loaderClasses.has("is-hidden"), false);
+  app.advanceTime(1);
   assert.equal(app.loaderClasses.has("is-hidden"), true);
+  assert.equal(app.launchScreen.hidden, false);
+  app.advanceTime(350);
   assert.equal(app.launchScreen.hidden, true);
 });

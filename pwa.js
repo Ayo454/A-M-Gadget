@@ -10,7 +10,7 @@ function setPwaStatus(message, showInstallHelp = false) {
 }
 
 if (appLaunchScreen) {
-  const minimumVisibleMs = 500;
+  const minimumVisibleMs = 20000;
   const startedAt = Date.now();
   let hideScheduled = false;
   let loadFallback;
@@ -30,7 +30,7 @@ if (appLaunchScreen) {
     }, remainingMs);
   }
 
-  loadFallback = window.setTimeout(hideAppLaunchScreen, 8000);
+  loadFallback = window.setTimeout(hideAppLaunchScreen, 30000);
   if (document.readyState === "complete") hideAppLaunchScreen();
   else window.addEventListener("load", hideAppLaunchScreen, { once: true });
 }
