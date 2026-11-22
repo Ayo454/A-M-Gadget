@@ -26,6 +26,7 @@ const contentTypes = {
   ".js": "text/javascript; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".webp": "image/webp"
 };
 const defaultProducts = [
@@ -1886,6 +1887,8 @@ function createServer(options = {}) {
     try {
       const pathname = url.pathname === "/" ? "/index.html"
         : url.pathname === "/admin" ? "/admin.html"
+        : url.pathname === "/app" ? "/app.html"
+        : url.pathname === "/rider" || url.pathname === "/rider.html" ? "/rider.app.html"
         : url.pathname;
       requestedPath = decodeURIComponent(pathname);
     } catch {

@@ -1,0 +1,15 @@
+{
+  "id": "/app.html",
+  "name": "A&M Gadget Shop",
+  "short_name": "A&M Shop",
+  "description": "Shop gadgets and manage your A&M Gadget orders.",
+  "start_url": "/app.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f5f2",
+  "theme_color": "#111118",
+  "icons": [
+    { "src": "/app-icon.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/app-icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

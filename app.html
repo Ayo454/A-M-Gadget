@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111118">
+  <meta name="description" content="Shop A&M Gadget products, place orders, and follow your delivery in one app.">
+  <title>A&amp;M Gadget Shop App</title>
+  <link rel="manifest" href="/app.webmanifest">
+  <link rel="icon" href="/app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app-shell.css">
+</head>
+<body class="shop-app">
+  <header class="app-topbar">
+    <div class="app-brand">
+      <img src="/app-icon.svg" alt="" width="38" height="38">
+      <div><strong>A&amp;M Gadget</strong><small>Shop app</small></div>
+    </div>
+    <p class="app-topbar-status" data-pwa-status role="status" aria-live="polite"></p>
+    <button class="app-install-button" type="button" data-install-app hidden>Install app</button>
+  </header>
+
+  <main class="app-stage">
+    <p class="app-feedback" id="appFeedback" role="status" aria-live="polite"></p>
+    <div class="app-auth-overlay" id="appAuth" hidden>
+      <section class="app-auth-card" role="dialog" aria-modal="true" aria-labelledby="appAuthTitle">
+        <div class="app-auth-intro">
+          <span class="app-kicker">YOUR SHOPPING APP</span>
+          <h1 id="appAuthTitle">Everything you need,<br>in one place.</h1>
+          <p>Sign in to check out securely and follow your orders.</p>
+        </div>
+        <div class="app-auth-panel">
+          <button type="button" class="app-close-auth" id="closeAppAuth" aria-label="Close sign in">×</button>
+          <div class="app-auth-tabs" role="tablist" aria-label="Account options">
+            <button type="button" class="active" id="appShowLogin" role="tab" aria-selected="true">Sign in</button>
+            <button type="button" id="appShowRegister" role="tab" aria-selected="false">Create account</button>
+          </div>
+          <form class="app-form" id="appLoginForm">
+            <label>Email address<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
+            <label>Password<input name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required></label>
+            <button class="app-primary-button" type="submit">Sign in</button>
+          </form>
+          <form class="app-form" id="appRegisterForm" hidden>
+            <label>Full name<input name="name" type="text" autocomplete="name" maxlength="80" required></label>
+            <label>Email address<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
+            <label>Phone number<input name="phone" type="tel" autocomplete="tel" maxlength="30" placeholder="+234 801 234 5678" required></label>
+            <label>Delivery address<textarea name="address" autocomplete="street-address" minlength="5" maxlength="300" rows="2" required></textarea></label>
+            <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+            <button class="app-primary-button" type="submit">Create account</button>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <section class="app-shell" id="appShell" hidden>
+      <aside class="app-sidebar">
+        <div class="app-sidebar-label">YOUR APP</div>
+        <nav class="app-side-nav" aria-label="App navigation">
+          <button type="button" class="active" data-app-view="shop"><span>⌂</span> Shop</button>
+          <button type="button" data-app-view="orders"><span>▤</span> My orders</button>
+          <button type="button" data-app-view="bag"><span>▢</span> Shopping bag</button>
+          <button type="button" data-app-view="account"><span>○</span> Account</button>
+        </nav>
+        <div class="app-sidebar-bottom">
+          <span class="app-status-dot"></span>
+          <div><strong>Secure checkout</strong><small>Delivery price before payment</small></div>
+        </div>
+      </aside>
+
+      <div class="app-main">
+        <div class="app-toolbar">
+          <div class="app-greeting"><span class="app-kicker">A&amp;M GADGET</span><strong id="appGreeting">Good day</strong></div>
+          <label class="app-search"><span aria-hidden="true">⌕</span><input id="appSearch" type="search" placeholder="Search products" aria-label="Search products"></label>
+          <button type="button" class="app-sign-in-button" id="appSignIn">Sign in</button>
+          <button type="button" class="app-cart-button" id="openCart" aria-label="Open shopping bag">Bag <span id="appCartCount">0</span></button>
+        </div>
+
+        <section class="app-panel" data-app-panel="shop">
+          <section class="app-hero">
+            <div>
+              <span class="app-kicker">TECH THAT MOVES WITH YOU</span>
+              <h1>Your next<br>upgrade starts here.</h1>
+              <p>Find the gadgets that fit your everyday.</p>
+              <button type="button" data-scroll-products>Explore top picks <span>→</span></button>
+            </div>
+            <div class="app-hero-orbit" aria-hidden="true"><span>A&amp;M</span></div>
+          </section>
+          <article class="app-promo-card">
+            <div><span class="app-kicker">JUST LANDED</span><h2>Fresh tech.<br>New possibilities.</h2><p>See what's new in the gadget collection.</p></div>
+            <span class="app-promo-symbol" aria-hidden="true">✦</span>
+          </article>
+          <div class="app-section-heading"><div><span class="app-kicker">FIND YOUR FIT</span><h2>Shop by category</h2></div></div>
+          <div class="app-category-list" id="appCategories" aria-label="Filter products by category"></div>
+          <div class="app-section-heading app-top-picks-heading" id="appTopPicks"><div><span class="app-kicker">CURATED FOR YOU</span><h2>Top picks</h2></div></div>
+          <div class="app-product-grid" id="appProductGrid" aria-live="polite"></div>
+        </section>
+
+        <section class="app-panel" data-app-panel="orders" hidden>
+          <div class="app-page-heading"><div><span class="app-kicker">ORDER HISTORY</span><h1>My orders</h1><p>Review payment status and delivery progress.</p></div></div>
+          <div class="app-order-list" id="appOrderList"></div>
+        </section>
+
+        <section class="app-panel" data-app-panel="account" hidden>
+          <div class="app-page-heading"><div><span class="app-kicker">YOUR DETAILS</span><h1>Account</h1><p>Your signed-in shopping account.</p></div></div>
+          <div class="app-guest-card" id="appAccountGuest" hidden>
+            <p>Sign in or create an account to see your orders and manage your delivery details.</p>
+            <button type="button" class="app-primary-button" data-open-auth="login">Sign in</button>
+            <button type="button" class="app-secondary-button" data-open-auth="register">Create account</button>
+          </div>
+          <div class="app-account-card" id="appAccountCard" hidden>
+            <div><span>Name</span><strong id="appAccountName">—</strong></div>
+            <div><span>Email</span><strong id="appAccountEmail">—</strong></div>
+            <div><span>Phone</span><strong id="appAccountPhone">—</strong></div>
+            <div><span>Delivery address</span><strong id="appAccountAddress">—</strong></div>
+            <button type="button" class="app-secondary-button" id="appLogout">Sign out</button>
+          </div>
+        </section>
+      </div>
+      <nav class="app-mobile-nav" aria-label="App navigation">
+        <button type="button" class="active" data-app-view="shop"><span>⌂</span>Shop</button>
+        <button type="button" data-app-view="orders"><span>▤</span>Orders</button>
+        <button type="button" data-app-view="bag"><span>▢</span>Bag</button>
+        <button type="button" data-app-view="account"><span>○</span>Account</button>
+      </nav>
+    </section>
+  </main>
+
+  <div class="app-overlay" id="cartOverlay" hidden>
+    <section class="app-sheet app-cart-sheet" role="dialog" aria-modal="true" aria-labelledby="cartTitle">
+      <div class="app-sheet-heading"><div><span class="app-kicker">YOUR BAG</span><h2 id="cartTitle">Shopping bag</h2></div><button type="button" class="app-close-button" data-close-cart aria-label="Close bag">×</button></div>
+      <div class="app-cart-list" id="appCartList"></div>
+      <div class="app-cart-footer"><div><span>Items subtotal</span><strong id="appCartSubtotal">₦0</strong></div><button type="button" class="app-primary-button" id="startCheckout">Continue to checkout</button></div>
+    </section>
+  </div>
+
+  <div class="app-overlay" id="checkoutOverlay" hidden>
+    <section class="app-sheet app-checkout-sheet" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
+      <div class="app-sheet-heading"><div><span class="app-kicker">SECURE CHECKOUT</span><h2 id="checkoutTitle">Delivery details</h2></div><button type="button" class="app-close-button" data-close-checkout aria-label="Close checkout">×</button></div>
+      <p class="app-checkout-feedback" id="checkoutFeedback" role="status" aria-live="polite"></p>
+      <form class="app-form" id="appCheckoutForm">
+        <label>Recipient name<input name="name" type="text" maxlength="80" autocomplete="name" required></label>
+        <label>Email<input name="email" type="email" readonly autocomplete="email"></label>
+        <label>Phone<input name="phone" type="tel" maxlength="24" autocomplete="tel" required></label>
+        <label>Delivery address<textarea name="address" minlength="5" maxlength="300" rows="3" autocomplete="street-address" required></textarea></label>
+        <div class="app-order-summary">
+          <h3>Order summary</h3>
+          <div id="checkoutItems"></div>
+          <div><span>Items subtotal</span><strong id="checkoutSubtotal">—</strong></div>
+          <div><span id="checkoutDeliveryLabel">Delivery</span><strong id="checkoutDelivery">—</strong></div>
+          <div class="app-order-total"><span>Total to pay</span><strong id="checkoutTotal">—</strong></div>
+        </div>
+        <button class="app-primary-button" id="placeAppOrder" type="submit" disabled>Place order</button>
+      </form>
+      <section class="app-payment-confirmation" id="appPaymentConfirmation" hidden>
+        <span class="app-kicker">ORDER PLACED</span><h3>Transfer to complete your order</h3>
+        <p id="appPaymentOrderId"></p>
+        <dl><div><dt>Bank</dt><dd id="appPaymentBank">—</dd></div><div><dt>Account name</dt><dd id="appPaymentName">—</dd></div><div><dt>Account number</dt><dd id="appPaymentNumber">—</dd></div></dl>
+        <p id="appPaymentFeedback" role="status" aria-live="polite"></p>
+        <button type="button" class="app-primary-button" id="reportAppPayment">I have paid</button>
+        <button type="button" class="app-secondary-button" id="finishCheckout">Done</button>
+      </section>
+    </section>
+  </div>
+
+  <script src="/pwa.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

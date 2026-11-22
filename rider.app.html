@@ -3,24 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0b0b0f">
-  <title>Rider Portal | A&amp;M Gadget</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <meta name="theme-color" content="#111118">
+  <title>A&amp;M Gadget Rider App</title>
+  <link rel="manifest" href="/rider.webmanifest">
+  <link rel="icon" href="/rider-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/app-shell.css">
 </head>
 <body class="rider-portal">
-  <div class="announcement">
-    <p>Check your dashboard for new assigned deliveries.</p>
-    <button aria-label="Close announcement">&times;</button>
-  </div>
-  <header class="header rider-header">
-    <div class="brand" aria-label="A&amp;M Gadget rider portal">
-      <span class="brand-mark">A&amp;M</span>
-      <span>A&amp;M Gadget</span>
+  <header class="app-topbar rider-app-topbar">
+    <div class="app-brand">
+      <img src="/rider-icon.svg" alt="" width="38" height="38">
+      <div><strong>A&amp;M Gadget</strong><small>Rider app</small></div>
     </div>
-    <div class="rider-header-label">RIDER PORTAL</div>
+    <p class="app-topbar-status" data-pwa-status role="status" aria-live="polite">Rider delivery app</p>
+    <button class="app-install-button" type="button" data-install-app hidden>Install app</button>
   </header>
 
   <main class="rider-main">
@@ -64,27 +61,53 @@
     <section class="rider-dashboard" id="riderDashboard" hidden>
       <div class="rider-workspace">
         <aside class="rider-sidebar">
-          <p>RIDER PORTAL</p>
           <nav aria-label="Rider dashboard navigation">
-            <button type="button" class="active" data-rider-view="overview">Overview</button>
-            <button type="button" data-rider-view="deliveries">My deliveries</button>
-            <button type="button" data-rider-view="earnings">Earnings &amp; payouts</button>
+            <button type="button" class="active" data-rider-view="overview"><span aria-hidden="true">⌂</span>Home</button>
+            <button type="button" data-rider-view="deliveries"><span aria-hidden="true">↗</span>Deliveries</button>
+            <button type="button" data-rider-view="earnings"><span aria-hidden="true">₦</span>Earnings</button>
+            <button type="button" data-rider-view="account"><span aria-hidden="true">○</span>Account</button>
           </nav>
-          <button type="button" class="rider-logout" id="riderLogout">Sign out</button>
         </aside>
         <div class="rider-content">
           <section class="rider-panel" data-rider-panel="overview">
-            <div class="rider-page-heading">
-              <p class="eyebrow dark"><span></span> Rider dashboard</p>
-              <h1>Welcome, <span id="riderName">Rider</span></h1>
-              <p>Your assigned orders, delivery progress, and earnings.</p>
+            <div class="rider-page-heading rider-dashboard-heading">
+              <div>
+                <p class="eyebrow dark"><span></span> RIDER OVERVIEW</p>
+                <h1>Hi, <span id="riderName">Rider</span></h1>
+                <p>Here’s what’s happening with your deliveries today.</p>
+              </div>
+              <span class="rider-online-pill"><i></i><span id="riderAvailabilityLabel">Ready to ride</span></span>
             </div>
+            <article class="rider-balance-card">
+              <div><span>AVAILABLE EARNINGS</span><strong id="riderBalance">₦0</strong><small>From completed deliveries</small></div>
+              <span class="rider-balance-mark" aria-hidden="true">₦</span>
+            </article>
             <div class="rider-stat-grid">
-              <article><span>Assigned deliveries</span><strong id="riderActiveCount">0</strong></article>
+              <article><span>Active deliveries</span><strong id="riderActiveCount">0</strong></article>
               <article><span>Completed deliveries</span><strong id="riderDeliveredCount">0</strong></article>
-              <article><span>Available earnings</span><strong id="riderBalance">₦0</strong></article>
             </div>
-            <div class="rider-panel-heading"><h2>Recent deliveries</h2><button type="button" data-rider-view="deliveries">View all</button></div>
+            <section class="rider-map-card" aria-labelledby="riderRouteTitle">
+              <div class="rider-map-heading">
+                <div><span class="rider-eyebrow">YOUR NEXT STOP</span><h2 id="riderRouteTitle">Delivery route</h2></div>
+                <span class="rider-route-badge" id="riderRouteBadge">No active route</span>
+              </div>
+              <div class="rider-map-visual" aria-hidden="true">
+                <svg viewBox="0 0 640 220" preserveAspectRatio="xMidYMid slice">
+                  <path class="rider-map-road" d="M-20 174 114 118 188 143 282 56 376 91 478 29 660 72"/>
+                  <path class="rider-map-road thin" d="m52-20 82 92 34 71 89 96M212-15l52 71-35 77 84 87M421-20l-29 111 53 73 35 62"/>
+                  <path class="rider-map-route" d="M112 149c74 0 70-79 148-79s70 47 127 47 66-62 137-62"/>
+                  <circle class="rider-map-start" cx="112" cy="149" r="8"/>
+                  <circle class="rider-map-end" cx="524" cy="55" r="10"/>
+                </svg>
+                <span class="rider-map-label start">PICKUP</span>
+                <span class="rider-map-label end">DROP-OFF</span>
+              </div>
+              <div class="rider-route-details">
+                <div><span id="riderRouteRecipient">No delivery assigned</span><strong id="riderRouteAddress">Your next assigned delivery will appear here.</strong></div>
+                <a class="rider-directions-link" id="riderDirections" href="#" target="_blank" rel="noopener noreferrer" hidden>Open directions <span aria-hidden="true">↗</span></a>
+              </div>
+            </section>
+            <div class="rider-panel-heading"><h2>Recent deliveries</h2><button type="button" data-rider-view="deliveries">View all <span aria-hidden="true">→</span></button></div>
             <div class="rider-order-list" id="riderRecentOrders"></div>
           </section>
 
@@ -115,16 +138,25 @@
             <div class="rider-panel-heading"><h2>Payout history</h2></div>
             <div class="rider-payout-list" id="riderPayoutHistory"></div>
           </section>
+          <section class="rider-panel" data-rider-panel="account" hidden>
+            <div class="rider-page-heading">
+              <div><p class="eyebrow dark"><span></span> RIDER ACCOUNT</p><h1>Account details</h1><p>Your approved rider and payout information.</p></div>
+            </div>
+            <div class="rider-account-card">
+              <div><span>Full name</span><strong id="riderAccountName">—</strong></div>
+              <div><span>Email address</span><strong id="riderAccountEmail">—</strong></div>
+              <div><span>Phone number</span><strong id="riderAccountPhone">—</strong></div>
+              <div><span>Vehicle</span><strong id="riderAccountVehicle">—</strong></div>
+              <div><span>Payout account</span><strong id="riderAccountNumber">—</strong></div>
+              <button type="button" class="rider-signout-button" id="riderLogout">Sign out</button>
+            </div>
+          </section>
         </div>
       </div>
     </section>
   </main>
 
-  <footer>
-    <span class="brand"><span class="brand-mark">A&amp;M</span><span>A&amp;M Gadget</span></span>
-    <p>Rider delivery portal</p>
-  </footer>
-  <script src="announcement.js"></script>
-  <script src="rider.js"></script>
+  <script src="/pwa.js"></script>
+  <script src="/rider.js"></script>
 </body>
 </html>

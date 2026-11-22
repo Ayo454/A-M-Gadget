@@ -81,11 +81,25 @@ test("serves the store and keeps the data files private", async t => {
 
   const accountPage = await fetch(`${baseUrl}/account.html`);
   assert.equal(accountPage.status, 200);
-  const riderPage = await fetch(`${baseUrl}/rider.html`);
+  const riderPage = await fetch(`${baseUrl}/rider.app.html`);
   assert.equal(riderPage.status, 200);
   const riderPageHtml = await riderPage.text();
   assert.match(riderPageHtml, /Rider portal/);
   assert.doesNotMatch(riderPageHtml, /href="(?:index|admin)(?:\.html|\/|#)/);
+  const riderAppRoute = await fetch(`${baseUrl}/rider`);
+  assert.equal(riderAppRoute.status, 200);
+  assert.match(await riderAppRoute.text(), /data-install-app/);
+  const oldRiderPage = await fetch(`${baseUrl}/rider.html`);
+  assert.equal(oldRiderPage.status, 200);
+  const shopAppRoute = await fetch(`${baseUrl}/app`);
+  assert.equal(shopAppRoute.status, 200);
+  assert.match(await shopAppRoute.text(), /app.webmanifest/);
+  for (const manifestPath of ["/app.webmanifest", "/rider.webmanifest"]) {
+    const manifestResponse = await fetch(`${baseUrl}${manifestPath}`);
+    assert.equal(manifestResponse.status, 200);
+    assert.match(manifestResponse.headers.get("content-type"), /application\/manifest\+json/);
+    assert.equal(typeof (await manifestResponse.json()).start_url, "string");
+  }
   const announcementScript = await fetch(`${baseUrl}/announcement.js`);
   assert.equal(announcementScript.status, 200);
   const adminPage = await fetch(`${baseUrl}/admin`);

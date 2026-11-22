@@ -10,7 +10,12 @@ async function riderRequest(path, options = {}) {
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers }
   });
-  const result = await response.json();
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error(`The rider server returned an unexpected page (HTTP ${response.status}). Refresh or ask the store to update the hosted app.`);
+  }
   if (!response.ok) throw new Error(result.error || "The request could not be completed.");
   return result;
 }
@@ -187,6 +192,24 @@ function renderRiderOrder(order) {
 function renderRiderOrders() {
   const allOrders = riderData.orders || [];
   const activeOrders = allOrders.filter(order => !["delivered", "cancelled"].includes(order.status));
+  const nextOrder = activeOrders[0];
+  const routeBadge = document.querySelector("#riderRouteBadge");
+  const routeRecipient = document.querySelector("#riderRouteRecipient");
+  const routeAddress = document.querySelector("#riderRouteAddress");
+  const directions = document.querySelector("#riderDirections");
+  if (nextOrder) {
+    routeBadge.textContent = riderStatusLabel(nextOrder.status);
+    routeRecipient.textContent = nextOrder.recipientName || "Customer";
+    routeAddress.textContent = nextOrder.shippingAddress || "No delivery address provided.";
+    directions.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nextOrder.shippingAddress || "")}`;
+    directions.hidden = !nextOrder.shippingAddress;
+  } else {
+    routeBadge.textContent = "No active route";
+    routeRecipient.textContent = "No delivery assigned";
+    routeAddress.textContent = "Your next assigned delivery will appear here.";
+    directions.removeAttribute("href");
+    directions.hidden = true;
+  }
   const destinations = [
     [document.querySelector("#riderOrders"), activeOrders, "You have no active deliveries."],
     [document.querySelector("#riderRecentOrders"), allOrders.slice(0, 3), "No deliveries have been assigned yet."]
@@ -233,8 +256,16 @@ async function loadRiderDashboard() {
   riderAuth.hidden = true;
   riderDashboard.hidden = false;
   document.querySelector("#riderName").textContent = result.rider.name;
+  document.querySelector("#riderAccountName").textContent = result.rider.name || "—";
+  document.querySelector("#riderAccountEmail").textContent = result.rider.email || "—";
+  document.querySelector("#riderAccountPhone").textContent = result.rider.phone || "—";
+  document.querySelector("#riderAccountVehicle").textContent = result.rider.vehicleType || "—";
+  document.querySelector("#riderAccountNumber").textContent =
+    `Account ending ${result.earnings.accountLastFour || "••••"}`;
   const activeOrders = result.orders.filter(order => !["delivered", "cancelled"].includes(order.status));
   const completedOrders = result.orders.filter(order => order.status === "delivered");
+  document.querySelector("#riderAvailabilityLabel").textContent =
+    activeOrders.length ? "On delivery" : "Ready to ride";
   document.querySelector("#riderActiveCount").textContent = String(activeOrders.length);
   document.querySelector("#riderDeliveredCount").textContent = String(completedOrders.length);
   document.querySelector("#riderBalance").textContent = formatRiderMoney(result.earnings.availableBalance);
