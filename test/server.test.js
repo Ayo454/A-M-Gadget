@@ -636,7 +636,7 @@ test("sends Brevo welcome, order, and admin status emails", async t => {
   assert.match(sentEmails[2].options.body.subject, /Payment confirmed/);
 });
 
-test("keeps customer and admin sessions after restarts until logout", async t => {
+test("keeps customer, rider, and admin sessions after restarts until logout", async t => {
   const app = await createTestApp(t);
   let baseUrl = await app.listen();
 
@@ -661,6 +661,30 @@ test("keeps customer and admin sessions after restarts until logout", async t =>
   assert.equal(adminLogin.status, 200);
   const adminCookie = sessionCookie(adminLogin);
 
+  const riderApplication = await jsonRequest(`${baseUrl}/api/rider/register`, "POST", {
+    name: "Test Rider",
+    email: "rider@example.com",
+    phone: "+234 801 234 5678",
+    password: "rider-password",
+    vehicleType: "Motorcycle",
+    licensePlate: "ABC 123 XY",
+    bankName: "Test Bank",
+    accountName: "Test Rider",
+    accountNumber: "1234567890"
+  });
+  assert.equal(riderApplication.status, 201);
+  const pendingRiders = await jsonRequest(`${baseUrl}/api/admin/riders`, "GET", undefined, adminCookie);
+  const rider = (await pendingRiders.json())[0];
+  const approval = await jsonRequest(`${baseUrl}/api/admin/riders/${rider.id}`, "PATCH", { action: "approve" }, adminCookie);
+  assert.equal(approval.status, 200);
+  const riderLogin = await jsonRequest(`${baseUrl}/api/rider/login`, "POST", {
+    email: "rider@example.com",
+    password: "rider-password"
+  });
+  assert.equal(riderLogin.status, 200);
+  const riderCookie = sessionCookie(riderLogin);
+  assert.match(riderLogin.headers.get("set-cookie"), /Max-Age=34560000/);
+
   await app.close();
   app.restart();
   baseUrl = await app.listen();
@@ -674,18 +698,24 @@ test("keeps customer and admin sessions after restarts until logout", async t =>
   assert.equal((await adminSession.json()).user.role, "admin");
   const adminOrders = await jsonRequest(`${baseUrl}/api/admin/orders`, "GET", undefined, adminCookie);
   assert.equal(adminOrders.status, 200);
+  const riderSession = await jsonRequest(`${baseUrl}/api/auth/session`, "GET", undefined, riderCookie);
+  assert.equal((await riderSession.json()).user.role, "rider");
+  const riderDashboard = await jsonRequest(`${baseUrl}/api/rider/dashboard`, "GET", undefined, riderCookie);
+  assert.equal(riderDashboard.status, 200);
   const privateSessions = await fetch(`${baseUrl}/data/sessions.json`);
   assert.equal(privateSessions.status, 404);
 
   const customerLogout = await jsonRequest(`${baseUrl}/api/auth/logout`, "POST", {}, customerCookie);
+  const riderLogout = await jsonRequest(`${baseUrl}/api/auth/logout`, "POST", {}, riderCookie);
   const adminLogout = await jsonRequest(`${baseUrl}/api/auth/logout`, "POST", {}, adminCookie);
   assert.equal(customerLogout.status, 200);
+  assert.equal(riderLogout.status, 200);
   assert.equal(adminLogout.status, 200);
 
   await app.close();
   app.restart();
   baseUrl = await app.listen();
-  for (const cookie of [customerCookie, adminCookie]) {
+  for (const cookie of [customerCookie, riderCookie, adminCookie]) {
     const response = await jsonRequest(`${baseUrl}/api/auth/session`, "GET", undefined, cookie);
     assert.equal((await response.json()).user, null);
   }

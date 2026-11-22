@@ -8,6 +8,7 @@ let riderData = null;
 async function riderRequest(path, options = {}) {
   const response = await fetch(path, {
     ...options,
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...options.headers }
   });
   let result;

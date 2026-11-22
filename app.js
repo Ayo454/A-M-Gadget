@@ -27,6 +27,7 @@ let quoteTimer = null;
 async function appRequest(url, options = {}) {
   const response = await fetch(url, {
     ...options,
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...options.headers }
   });
   let result;
