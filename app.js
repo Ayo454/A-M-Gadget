@@ -129,8 +129,16 @@ function getCartSubtotal() {
 }
 
 function updateCartBadge() {
-  document.querySelector("#appCartCount").textContent =
-    String(appCart.reduce((sum, item) => sum + item.quantity, 0));
+  const totalItems = appCart.reduce((sum, item) => sum + item.quantity, 0);
+  const countLabel = totalItems > 99 ? "99+" : String(totalItems);
+  document.querySelector("#appCartCount").textContent = countLabel;
+  const mobileCount = document.querySelector("#appMobileCartCount");
+  mobileCount.textContent = countLabel;
+  mobileCount.hidden = totalItems === 0;
+  document.querySelector("#appMobileBagButton").setAttribute(
+    "aria-label",
+    `Shopping bag, ${totalItems} ${totalItems === 1 ? "item" : "items"}`
+  );
 }
 
 function renderCart() {

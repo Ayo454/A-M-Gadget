@@ -121,7 +121,10 @@
       <nav class="app-mobile-nav" aria-label="App navigation">
         <button type="button" class="active" data-app-view="shop"><span>⌂</span>Shop</button>
         <button type="button" data-app-view="orders"><span>▤</span>Orders</button>
-        <button type="button" data-app-view="bag"><span>▢</span>Bag</button>
+        <button type="button" id="appMobileBagButton" data-app-view="bag" aria-label="Shopping bag">
+          <span class="app-mobile-nav-icon" aria-hidden="true">▢<span class="app-mobile-cart-badge" id="appMobileCartCount" hidden>0</span></span>
+          Bag
+        </button>
         <button type="button" data-app-view="account"><span>○</span>Account</button>
       </nav>
     </section>
