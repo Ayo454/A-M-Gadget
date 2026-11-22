@@ -161,7 +161,7 @@ test("keeps the launch screen until page load and fades it away", async () => {
   const app = await createPwaHarness({ withLoader: true, readyState: "loading", fakeTimers: true });
   assert.equal(app.launchScreen.hidden, false);
   app.windowListeners.get("load")();
-  app.advanceTime(19999);
+  app.advanceTime(9999);
   assert.equal(app.loaderClasses.has("is-hidden"), false);
   app.advanceTime(1);
   assert.equal(app.loaderClasses.has("is-hidden"), true);

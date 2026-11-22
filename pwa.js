@@ -10,7 +10,7 @@ function setPwaStatus(message, showInstallHelp = false) {
 }
 
 if (appLaunchScreen) {
-  const minimumVisibleMs = 20000;
+  const minimumVisibleMs = 10000;
   const startedAt = Date.now();
   let hideScheduled = false;
   let loadFallback;
