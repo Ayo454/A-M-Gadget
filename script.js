@@ -333,7 +333,6 @@ async function openCheckout() {
     showToast("Your bag is empty.");
     return;
   }
-  checkoutButton.disabled = true;
   checkoutOverlay.hidden = false;
   checkoutForm.hidden = true;
   checkoutSignIn.hidden = true;
@@ -345,7 +344,9 @@ async function openCheckout() {
   currentCheckoutOrderId = null;
   checkoutLoading.hidden = false;
   showCheckoutStatus("");
+  document.querySelector("#checkoutClose").focus();
   setCart(false);
+  checkoutButton.disabled = true;
   try {
     const checkout = await checkoutRequest("/api/checkout");
     checkoutForm.reset();
@@ -377,9 +378,12 @@ function closeCheckout(returnToBag = true) {
   checkoutQuoteAddress = "";
   checkoutQuotePromise = null;
   checkoutQuotePendingAddress = "";
-  if (returnToBag && bag.length) setCart(true);
-  else setCart(false);
-  checkoutButton.focus();
+  if (returnToBag && bag.length) {
+    setCart(true);
+  } else {
+    setCart(false);
+    bagButton.focus();
+  }
 }
 
 checkoutAddress.addEventListener("input", () => {
