@@ -222,6 +222,22 @@ function createServer(options = {}) {
     : null);
   const adminEmail = String(options.adminEmail ?? process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
   const adminPassword = String(options.adminPassword ?? process.env.ADMIN_PASSWORD ?? "");
+  const allowedOrigins = new Set(String(options.allowedOrigins ?? process.env.ALLOWED_ORIGINS ?? "https://amgadget.netlify.app")
+    .split(",")
+    .map(value => value.trim())
+    .filter(Boolean)
+    .map(value => {
+      let origin;
+      try {
+        origin = new URL(value);
+      } catch {
+        throw new Error("ALLOWED_ORIGINS must be a comma-separated list of valid HTTP or HTTPS origins.");
+      }
+      if (!["http:", "https:"].includes(origin.protocol) || origin.username || origin.password) {
+        throw new Error("ALLOWED_ORIGINS must be a comma-separated list of valid HTTP or HTTPS origins.");
+      }
+      return origin.origin;
+    }));
   const orderNotificationEmail = String(options.orderNotificationEmail ?? process.env.ORDER_NOTIFICATION_EMAIL ?? "").trim().toLowerCase() || adminEmail;
   const orderNotificationPhones = [...new Set(String(options.orderNotificationPhones ?? process.env.ORDER_NOTIFICATION_PHONES ?? "")
     .split(",")
@@ -2089,7 +2105,8 @@ function createServer(options = {}) {
           } catch {
             origin = null;
           }
-          if (!origin || origin.host.toLowerCase() !== String(request.headers.host || "").toLowerCase()) {
+          if (!origin || (origin.host.toLowerCase() !== String(request.headers.host || "").toLowerCase() &&
+              !allowedOrigins.has(origin.origin))) {
             jsonResponse(response, 403, { error: "Cross-origin requests are not allowed." });
             return;
           }

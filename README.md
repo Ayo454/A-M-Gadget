@@ -17,7 +17,7 @@ GitHub Pages can serve the static frontend but cannot run this Node.js server. R
 
 To deploy on Render, create a Web Service for the `main` branch of this repository, leave Root Directory blank, use `npm install` as the Build Command and `npm start` as the Start Command. Set `NODE_ENV` to `production`; Render supplies `PORT`, and the server binds to `0.0.0.0` in production. Add admin, Brevo, Supabase, and payment settings as Render environment variables (never commit their values). Run the Supabase schema and local-data migration before deploying if you need to preserve existing data.
 
-To host the frontend on Netlify while keeping the API on Render, deploy this repository's root directory to Netlify. The `netlify.toml` file proxies `/api/*` requests to `https://a-m-gadget.onrender.com`, keeping API and session-cookie requests on the Netlify site origin. Redeploy on Netlify after adding or changing this configuration.
+To host the frontend on Netlify while keeping the API on Render, deploy this repository's root directory to Netlify. The `netlify.toml` file proxies `/api/*` requests to `https://a-m-gadget.onrender.com`, keeps API and session-cookie requests on the Netlify site origin, and maps the `/admin`, `/app`, and `/rider` page aliases to their static HTML files. The server allows `https://amgadget.netlify.app` for API mutations by default while rejecting other cross-origin requests. If you use a custom frontend domain, set `ALLOWED_ORIGINS` on Render to a comma-separated list of trusted origins (for example, `https://amgadget.netlify.app,https://shop.example.com`). Redeploy on Netlify after adding or changing the proxy configuration.
 
 The preferred admin dashboard URL is `/admin`; requests to `/admin.html` redirect there.
 

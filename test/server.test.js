@@ -543,7 +543,7 @@ test("marks session cookies Secure in production", async t => {
 });
 
 test("adds security headers, rejects cross-origin mutations, and limits failed logins", async t => {
-  const app = await createTestApp(t);
+  const app = await createTestApp(t, { allowedOrigins: ["https://amgadget.netlify.app"] });
   const baseUrl = await app.listen();
 
   const shopPage = await fetch(`${baseUrl}/app`);
@@ -562,6 +562,16 @@ test("adds security headers, rejects cross-origin mutations, and limits failed l
     body: JSON.stringify({ email: "customer@example.com", password: "wrong-password" })
   });
   assert.equal(crossOriginLogin.status, 403);
+
+  const netlifyLogin = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "https://amgadget.netlify.app"
+    },
+    body: JSON.stringify({ email: "customer@example.com", password: "wrong-password" })
+  });
+  assert.equal(netlifyLogin.status, 401);
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const failedLogin = await jsonRequest(`${baseUrl}/api/auth/login`, "POST", {

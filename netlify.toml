@@ -1,4 +1,28 @@
 [[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/app"
+  to = "/app.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/rider"
+  to = "/rider.app.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/rider.html"
+  to = "/rider.app.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/*"
   to = "https://a-m-gadget.onrender.com/api/:splat"
   status = 200
