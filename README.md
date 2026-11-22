@@ -2,7 +2,7 @@
 
 ## Run the store
 
-This project uses Node.js built-in modules and does not need package installation.
+This project uses Node.js and Express. Install its dependencies with `npm install`.
 
 1. Copy `.env.example` to `.env`.
 2. Set `ADMIN_EMAIL` and replace `ADMIN_PASSWORD` with a strong password in `.env`.
@@ -18,6 +18,8 @@ GitHub Pages can serve the static frontend but cannot run this Node.js server. R
 To deploy on Render, create a Web Service for the `main` branch of this repository, leave Root Directory blank, use `npm install` as the Build Command and `npm start` as the Start Command. Set `NODE_ENV` to `production`; Render supplies `PORT`, and the server binds to `0.0.0.0` in production. Add admin, Brevo, Supabase, and payment settings as Render environment variables (never commit their values). Run the Supabase schema and local-data migration before deploying if you need to preserve existing data.
 
 To host the frontend on Netlify while keeping the API on Render, deploy this repository's root directory to Netlify. The `netlify.toml` file proxies `/api/*` requests to `https://a-m-gadget.onrender.com`, keeps API and session-cookie requests on the Netlify site origin, and maps the `/admin`, `/app`, and `/rider` page aliases to their static HTML files. The server allows `https://amgadget.netlify.app` for API mutations by default while rejecting other cross-origin requests. If you use a custom frontend domain, set `ALLOWED_ORIGINS` on Render to a comma-separated list of trusted origins (for example, `https://amgadget.netlify.app,https://shop.example.com`). Redeploy on Netlify after adding or changing the proxy configuration.
+
+The Express server disables its identifying `X-Powered-By` header, uses Helmet for additional security headers, and limits failed sign-ins to 10 attempts per email address per 15 minutes. The limiter keeps counts in memory, so they reset when the server restarts and are not shared across multiple Render instances; use a shared rate-limit store before scaling to multiple instances.
 
 The preferred admin dashboard URL is `/admin`; requests to `/admin.html` redirect there.
 

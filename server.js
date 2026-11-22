@@ -3,6 +3,9 @@ const fs = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
 const { promisify } = require("node:util");
+const express = require("express");
+const { rateLimit } = require("express-rate-limit");
+const helmet = require("helmet");
 const { SupabaseStore } = require("./supabase-store");
 
 const scrypt = promisify(crypto.scrypt);
@@ -90,6 +93,12 @@ function readCookies(request) {
 }
 
 function readRequestBody(request, maxLength = 30000) {
+  if (request.body !== undefined) {
+    if (request.rawBodyLength > maxLength) {
+      return Promise.reject(Object.assign(new Error("Request body is too large."), { status: 413 }));
+    }
+    return Promise.resolve(request.body);
+  }
   return new Promise((resolve, reject) => {
     let body = "";
     let tooLarge = false;
@@ -282,59 +291,8 @@ function createServer(options = {}) {
   const deliveryPerKm = deliveryAmount("deliveryPerKm", "DELIVERY_PER_KM_NGN", 35);
   const minimumDeliveryFee = deliveryAmount("minimumDeliveryFee", "DELIVERY_MINIMUM_NGN", 2500);
   const sessions = new Map();
-  const loginFailures = new Map();
-  const loginFailureLimit = 10;
-  const loginFailureWindowMs = 15 * 60 * 1000;
   let writeQueue = Promise.resolve();
   let sessionsLoadPromise;
-
-  function loginFailureKey(email) {
-    return crypto.createHash("sha256").update(String(email).trim().toLowerCase()).digest("hex");
-  }
-
-  function loginRetryAfter(email) {
-    const key = loginFailureKey(email);
-    const record = loginFailures.get(key);
-    if (!record) return 0;
-    if (record.resetAt <= Date.now()) {
-      loginFailures.delete(key);
-      return 0;
-    }
-    return record.count >= loginFailureLimit
-      ? Math.ceil((record.resetAt - Date.now()) / 1000)
-      : 0;
-  }
-
-  function recordLoginFailure(email) {
-    const now = Date.now();
-    const key = loginFailureKey(email);
-    let record = loginFailures.get(key);
-    if (!record || record.resetAt <= now) {
-      record = { count: 0, resetAt: now + loginFailureWindowMs };
-    }
-    record.count += 1;
-    loginFailures.delete(key);
-    loginFailures.set(key, record);
-    if (loginFailures.size > 10000) {
-      for (const [trackedKey, trackedRecord] of loginFailures) {
-        if (trackedRecord.resetAt <= now) loginFailures.delete(trackedKey);
-      }
-      while (loginFailures.size > 10000) loginFailures.delete(loginFailures.keys().next().value);
-    }
-  }
-
-  function clearLoginFailures(email) {
-    loginFailures.delete(loginFailureKey(email));
-  }
-
-  function rejectIfLoginLimited(response, email) {
-    const retryAfter = loginRetryAfter(email);
-    if (!retryAfter) return false;
-    jsonResponse(response, 429, { error: "Too many failed sign-in attempts. Try again later." }, {
-      "Retry-After": String(retryAfter)
-    });
-    return true;
-  }
 
   function getPaymentDetails() {
     if (!paymentBankName || !paymentAccountName || !paymentAccountNumber) {
@@ -1564,18 +1522,15 @@ function createServer(options = {}) {
       const body = await readRequestBody(request);
       const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
       const password = typeof body.password === "string" ? body.password : "";
-      if (rejectIfLoginLimited(response, email)) return;
       const users = await readStore("users.json", []);
       const existing = users.find(user => user.email === email);
       const candidate = existing
         ? (await scrypt(password, Buffer.from(existing.salt, "hex"), 64)).toString("hex")
         : "";
       if (!existing || !safeEqual(candidate, existing.passwordHash)) {
-        recordLoginFailure(email);
         jsonResponse(response, 401, { error: "Email or password is incorrect." });
         return;
       }
-      clearLoginFailures(email);
       const user = { ...existing, role: "customer" };
       await createSession(response, request, user);
       jsonResponse(response, 200, { user: userDetails({ user }) });
@@ -1672,18 +1627,15 @@ function createServer(options = {}) {
       const body = await readRequestBody(request);
       const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
       const password = typeof body.password === "string" ? body.password : "";
-      if (rejectIfLoginLimited(response, email)) return;
       const riders = await readStore("riders.json", []);
       const existing = riders.find(rider => rider.email === email);
       const candidate = existing
         ? (await scrypt(password, Buffer.from(existing.salt, "hex"), 64)).toString("hex")
         : "";
       if (!existing || !safeEqual(candidate, existing.passwordHash)) {
-        recordLoginFailure(email);
         jsonResponse(response, 401, { error: "Email or password is incorrect." });
         return;
       }
-      clearLoginFailures(email);
       if (existing.status !== "active") {
         jsonResponse(response, 403, {
           error: existing.status === "rejected"
@@ -1975,13 +1927,10 @@ function createServer(options = {}) {
       const body = await readRequestBody(request);
       const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
       const password = typeof body.password === "string" ? body.password : "";
-      if (rejectIfLoginLimited(response, email)) return;
       if (!safeEqual(email, adminEmail) || !safeEqual(password, adminPassword)) {
-        recordLoginFailure(email);
         jsonResponse(response, 401, { error: "Email or password is incorrect." });
         return;
       }
-      clearLoginFailures(email);
       const user = { id: "admin", name: "Store admin", email: adminEmail, role: "admin" };
       await createSession(response, request, user);
       jsonResponse(response, 200, { user });
@@ -2094,25 +2043,67 @@ function createServer(options = {}) {
     }
   }
 
-  return http.createServer(async (request, response) => {
-    const url = new URL(request.url, "http://localhost");
+  const app = express();
+  app.disable("x-powered-by");
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    strictTransportSecurity: false
+  }));
+  app.use((request, response, next) => {
     Object.entries(securityHeaders).forEach(([name, value]) => response.setHeader(name, value));
     if (secureCookies) response.setHeader("Strict-Transport-Security", "max-age=31536000");
+    next();
+  });
+  app.use((request, response, next) => {
+    const url = new URL(request.url, "http://localhost");
+    if (!url.pathname.startsWith("/api/") ||
+        ["GET", "HEAD", "OPTIONS"].includes(request.method) ||
+        !request.headers.origin) {
+      next();
+      return;
+    }
+    let origin;
+    try {
+      origin = new URL(request.headers.origin);
+    } catch {
+      origin = null;
+    }
+    if (!origin || (origin.host.toLowerCase() !== String(request.headers.host || "").toLowerCase() &&
+        !allowedOrigins.has(origin.origin))) {
+      jsonResponse(response, 403, { error: "Cross-origin requests are not allowed." });
+      return;
+    }
+    next();
+  });
+  app.use((request, response, next) => {
+    const isCustomerRegistration = request.method === "POST" && request.path === "/api/auth/register";
+    express.json({
+      limit: isCustomerRegistration ? 3 * 1024 * 1024 : 30000,
+      verify(req, res, buffer) {
+        req.rawBodyLength = buffer.length;
+      }
+    })(request, response, next);
+  });
+  const failedLoginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    keyGenerator: request => crypto.createHash("sha256")
+      .update(String(request.body?.email || "").trim().toLowerCase())
+      .digest("hex"),
+    skipSuccessfulRequests: true,
+    handler(request, response) {
+      response.status(429).json({ error: "Too many failed sign-in attempts. Try again later." });
+    }
+  });
+  app.post("/api/auth/login", failedLoginLimiter);
+  app.post("/api/rider/login", failedLoginLimiter);
+  app.post("/api/admin/login", failedLoginLimiter);
+  app.use(async (request, response) => {
+    const url = new URL(request.url, "http://localhost");
     try {
       if (url.pathname.startsWith("/api/")) {
-        if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && request.headers.origin) {
-          let origin;
-          try {
-            origin = new URL(request.headers.origin);
-          } catch {
-            origin = null;
-          }
-          if (!origin || (origin.host.toLowerCase() !== String(request.headers.host || "").toLowerCase() &&
-              !allowedOrigins.has(origin.origin))) {
-            jsonResponse(response, 403, { error: "Cross-origin requests are not allowed." });
-            return;
-          }
-        }
         await loadSessions();
         await api(request, response, url);
       } else {
@@ -2129,6 +2120,22 @@ function createServer(options = {}) {
       });
     }
   });
+  app.use((error, request, response, next) => {
+    if (response.headersSent || response.destroyed) {
+      next(error);
+      return;
+    }
+    if (error.status === 413) {
+      jsonResponse(response, 413, { error: "Request body is too large." });
+      return;
+    }
+    if (error.status === 400 && error.type === "entity.parse.failed") {
+      jsonResponse(response, 400, { error: "Request body must be valid JSON." });
+      return;
+    }
+    next(error);
+  });
+  return http.createServer(app);
 }
 
 if (require.main === module) {

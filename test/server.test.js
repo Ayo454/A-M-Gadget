@@ -549,9 +549,19 @@ test("adds security headers, rejects cross-origin mutations, and limits failed l
   const shopPage = await fetch(`${baseUrl}/app`);
   assert.equal(shopPage.headers.get("x-frame-options"), "DENY");
   assert.equal(shopPage.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(shopPage.headers.get("x-powered-by"), null);
+  assert.equal(shopPage.headers.get("cross-origin-opener-policy"), "same-origin");
   assert.match(shopPage.headers.get("content-security-policy"), /frame-ancestors 'none'/);
   const products = await fetch(`${baseUrl}/api/products`);
   assert.equal(products.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+
+  const malformedJson = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{\"email\":"
+  });
+  assert.equal(malformedJson.status, 400);
+  assert.deepEqual(await malformedJson.json(), { error: "Request body must be valid JSON." });
 
   const crossOriginLogin = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
