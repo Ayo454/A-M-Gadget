@@ -47,6 +47,7 @@ if (installAppButton) {
     navigator.standalone === true;
   const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isEmbeddedBrowser = /\bElectron\//i.test(navigator.userAgent);
   installAppButton.hidden = isStandalone;
   if (isStandalone) setPwaStatus("App is installed.");
 
@@ -62,7 +63,9 @@ if (installAppButton) {
       setPwaStatus(
         isAppleMobile
           ? "On iPhone or iPad, open this page in Safari, tap Share, then tap Add to Home Screen."
-          : "Open your browser menu and choose Install app or Add to Home Screen.",
+          : isEmbeddedBrowser
+            ? "This embedded browser cannot install apps. Open this page in Chrome or Microsoft Edge, then tap Install app."
+            : "Open your browser menu and choose Install app or Add to Home Screen.",
         true
       );
       return;

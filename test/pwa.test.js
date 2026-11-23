@@ -184,6 +184,10 @@ test("shows iPhone installation steps and hides the button when already installe
   assert.match(iphone.status.textContent, /Safari.*Share.*Add to Home Screen/);
   assert.equal(iphone.statusClasses.has("install-help"), true);
 
+  const embeddedBrowser = await createPwaHarness({ userAgent: "Code/1.147.0 Electron/43.8.9" });
+  await embeddedBrowser.buttonListeners.get("click")();
+  assert.match(embeddedBrowser.status.textContent, /embedded browser cannot install.*Chrome or Microsoft Edge/i);
+
   const installed = await createPwaHarness({ standalone: true });
   assert.equal(installed.installButton.hidden, true);
   assert.match(installed.status.textContent, /App is installed/);
