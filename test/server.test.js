@@ -730,6 +730,16 @@ test("adds security headers, rejects cross-origin mutations, and limits failed l
   });
   assert.equal(netlifyLogin.status, 401);
 
+  const customDomainLogin = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "https://amgadget.name.ng"
+    },
+    body: JSON.stringify({ email: "customer@example.com", password: "wrong-password" })
+  });
+  assert.equal(customDomainLogin.status, 401);
+
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const failedLogin = await jsonRequest(`${baseUrl}/api/auth/login`, "POST", {
       email: "locked@example.com",

@@ -235,11 +235,17 @@ function createServer(options = {}) {
     : null);
   const adminEmail = String(options.adminEmail ?? process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
   const adminPassword = String(options.adminPassword ?? process.env.ADMIN_PASSWORD ?? "");
-  const allowedOrigins = new Set(String(options.allowedOrigins ?? process.env.ALLOWED_ORIGINS ?? "https://amgadget.netlify.app")
+  const defaultAllowedOrigins = [
+    "https://amgadget.netlify.app",
+    "https://amgadget.name.ng",
+    "https://www.amgadget.name.ng"
+  ];
+  const configuredAllowedOrigins = String(options.allowedOrigins ?? process.env.ALLOWED_ORIGINS ?? "")
     .split(",")
     .map(value => value.trim())
-    .filter(Boolean)
-    .map(value => {
+    .filter(Boolean);
+  const allowedOrigins = new Set(
+    [...defaultAllowedOrigins, ...configuredAllowedOrigins].map(value => {
       let origin;
       try {
         origin = new URL(value);
@@ -250,7 +256,8 @@ function createServer(options = {}) {
         throw new Error("ALLOWED_ORIGINS must be a comma-separated list of valid HTTP or HTTPS origins.");
       }
       return origin.origin;
-    }));
+    })
+  );
   const orderNotificationEmail = String(options.orderNotificationEmail ?? process.env.ORDER_NOTIFICATION_EMAIL ?? "").trim().toLowerCase() || adminEmail;
   const orderNotificationPhones = [...new Set(String(options.orderNotificationPhones ?? process.env.ORDER_NOTIFICATION_PHONES ?? "")
     .split(",")
