@@ -208,6 +208,8 @@ test("keeps customer support messages and audio-call signaling private to the cu
   const startedCall = await jsonRequest(`${baseUrl}/api/support/calls`, "POST", { action: "start" }, customerCookie);
   assert.equal(startedCall.status, 201);
   const call = (await startedCall.json()).call;
+  const incomingInbox = await jsonRequest(`${baseUrl}/api/admin/support`, "GET", undefined, adminCookie);
+  assert.equal((await incomingInbox.json())[0].callStatus, "ringing");
   const offer = await jsonRequest(`${baseUrl}/api/support/calls/${call.id}/signals`, "POST", {
     type: "offer",
     payload: "customer offer sdp"

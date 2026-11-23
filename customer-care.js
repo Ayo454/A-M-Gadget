@@ -179,7 +179,12 @@ async function loadCareInbox() {
   try {
     careThreads = await careRequest("/api/admin/support");
     renderCareThreads();
-    if (careSelectedId && careThreads.some(thread => thread.customerId === careSelectedId)) {
+    const selectedThread = careThreads.find(thread => thread.customerId === careSelectedId);
+    const incomingCall = careThreads.find(thread => thread.callStatus === "ringing");
+    if (incomingCall && incomingCall.customerId !== careSelectedId &&
+        (!selectedThread || !selectedThread.callStatus) && !careCallPeer) {
+      await selectCareThread(incomingCall.customerId);
+    } else if (selectedThread) {
       await loadSelectedCareThread();
     } else if (careSelectedId) {
       careSelectedId = "";
