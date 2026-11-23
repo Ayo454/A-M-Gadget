@@ -4,6 +4,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { test } = require("node:test");
 
+const projectDirectory = path.join(__dirname, "..");
 const pwaScriptPath = path.join(__dirname, "..", "pwa.js");
 
 function createFakeClock() {
@@ -127,6 +128,37 @@ function installPrompt(outcome) {
     promptCount: () => promptCount
   };
 }
+
+test("the public site and each app have installable manifests and raster icons", async () => {
+  const pages = [
+    ["index.html", "site.webmanifest"],
+    ["app.html", "app.webmanifest"],
+    ["customer-care.app.html", "customer-care.webmanifest"],
+    ["rider.app.html", "rider.webmanifest"],
+    ["admin.html", "admin.webmanifest"]
+  ];
+
+  for (const [pageFile, manifestFile] of pages) {
+    const page = await fs.readFile(path.join(projectDirectory, pageFile), "utf8");
+    const manifestLink = manifestFile.replace(".", "\\.");
+    assert.match(page, new RegExp(`<link rel="manifest" href="/${manifestLink}">`), pageFile);
+    assert.match(page, /data-install-app/, pageFile);
+    if (pageFile === "index.html") assert.match(page, /src="\/pwa\.js"/);
+
+    const manifest = JSON.parse(await fs.readFile(path.join(projectDirectory, manifestFile), "utf8"));
+    for (const icon of manifest.icons.filter(item => item.type === "image/png")) {
+      const iconPath = path.join(projectDirectory, icon.src.slice(1));
+      const png = await fs.readFile(iconPath);
+      assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], icon.src);
+      assert.equal(png.readUInt32BE(16), Number(icon.sizes.split("x")[0]), icon.src);
+      assert.equal(png.readUInt32BE(20), Number(icon.sizes.split("x")[1]), icon.src);
+    }
+  }
+
+  const netlifyConfig = await fs.readFile(path.join(projectDirectory, "netlify.toml"), "utf8");
+  assert.match(netlifyConfig, /for = "\/\*\.webmanifest"/);
+  assert.match(netlifyConfig, /Content-Type = "application\/manifest\+json"/);
+});
 
 test("opens the native install prompt and keeps the button after dismissal", async () => {
   const dismissed = await createPwaHarness();

@@ -133,7 +133,11 @@ button { cursor: pointer; }
   max-width: 430px; margin: 28px 0 34px;
   color: #aaaab4; font-size: 16px; line-height: 1.7;
 }
-.hero-actions { display: flex; align-items: center; gap: 24px; }
+.hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; }
+.site-install-button { gap: 0; cursor: pointer; }
+.site-install-button[hidden] { display: none; }
+.site-install-status { min-height: 18px; margin: 12px 0 0; color: #aaaab4; font-size: 11px; line-height: 1.5; }
+.site-install-status:empty { display: none; }
 .button {
   border: 0; border-radius: 4px; text-decoration: none;
   min-height: 54px; display: inline-flex; align-items: center; justify-content: center;
@@ -544,6 +548,7 @@ footer p a { margin-left:8px; color:var(--lime); font-weight:800; text-decoratio
   .hero-copy { padding:62px 24px 20px; }
   .hero h1 { font-size:52px; }
   .hero-description { font-size:14px; }
+  .hero-actions { gap:12px; }
   .hero-visual { min-height:430px; }
   .hero-product { transform:translate(-50%, -50%) scale(.68); top:50%; }
   .floating-spec.spec-one { right:-15px; }

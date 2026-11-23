@@ -1,14 +1,20 @@
-const CACHE_NAME = "am-gadget-app-shell-v6";
+const CACHE_NAME = "am-gadget-app-shell-v7";
 const APP_SHELL = [
+  "/",
   "/app.html",
   "/customercare",
   "/customer-care.app.html",
   "/rider.app.html",
   "/admin",
+  "/site.webmanifest",
   "/app.webmanifest",
   "/customer-care.webmanifest",
   "/rider.webmanifest",
   "/admin.webmanifest",
+  "/app-icon-192.png",
+  "/app-icon-512.png",
+  "/rider-icon-192.png",
+  "/rider-icon-512.png",
   "/app-shell.css",
   "/customer-care.css",
   "/styles.css",
@@ -21,7 +27,7 @@ const APP_SHELL = [
   "/app-icon.svg",
   "/rider-icon.svg"
 ];
-const APP_PAGES = new Set(["/app", "/app.html", "/customercare", "/customer-care", "/customer-care.app.html", "/rider", "/rider.html", "/rider.app.html", "/admin", "/admin.html"]);
+const APP_PAGES = new Set(["/", "/app", "/app.html", "/customercare", "/customer-care", "/customer-care.app.html", "/rider", "/rider.html", "/rider.app.html", "/admin", "/admin.html"]);
 const STATIC_ASSETS = new Set([
   "/app-shell.css",
   "/customer-care.css",
@@ -34,6 +40,11 @@ const STATIC_ASSETS = new Set([
   "/app-loader.css",
   "/app-icon.svg",
   "/rider-icon.svg",
+  "/app-icon-192.png",
+  "/app-icon-512.png",
+  "/rider-icon-192.png",
+  "/rider-icon-512.png",
+  "/site.webmanifest",
   "/app.webmanifest",
   "/customer-care.webmanifest",
   "/rider.webmanifest",

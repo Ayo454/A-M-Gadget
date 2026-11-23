@@ -79,6 +79,9 @@ test("serves the store and keeps the data files private", async t => {
   assert.equal(home.status, 200);
   const homeHtml = await home.text();
   assert.match(homeHtml, /A&amp;M Gadget/);
+  assert.match(homeHtml, /site\.webmanifest/);
+  assert.match(homeHtml, /data-install-app/);
+  assert.match(homeHtml, /src="\/pwa\.js"/);
   assert.match(homeHtml, /class="cart-drawer" inert/);
   assert.doesNotMatch(homeHtml, /class="cart-drawer" aria-hidden=/);
 
@@ -109,15 +112,21 @@ test("serves the store and keeps the data files private", async t => {
   const oldCustomerCarePage = await fetch(`${baseUrl}/customer-care`, { redirect: "manual" });
   assert.equal(oldCustomerCarePage.status, 308);
   assert.equal(oldCustomerCarePage.headers.get("location"), "/customercare");
-  for (const manifestPath of ["/app.webmanifest", "/customer-care.webmanifest", "/rider.webmanifest", "/admin.webmanifest"]) {
+  for (const manifestPath of ["/site.webmanifest", "/app.webmanifest", "/customer-care.webmanifest", "/rider.webmanifest", "/admin.webmanifest"]) {
     const manifestResponse = await fetch(`${baseUrl}${manifestPath}`);
     assert.equal(manifestResponse.status, 200);
     assert.match(manifestResponse.headers.get("content-type"), /application\/manifest\+json/);
     const manifest = await manifestResponse.json();
     assert.equal(typeof manifest.start_url, "string");
     assert.equal(manifest.display, "standalone");
+    if (manifestPath === "/site.webmanifest") assert.equal(manifest.start_url, "/");
     if (manifestPath === "/customer-care.webmanifest") assert.equal(manifest.start_url, "/customercare");
     if (manifestPath === "/admin.webmanifest") assert.equal(manifest.start_url, "/admin");
+  }
+  for (const iconPath of ["/app-icon-192.png", "/app-icon-512.png", "/rider-icon-192.png", "/rider-icon-512.png"]) {
+    const icon = await fetch(`${baseUrl}${iconPath}`);
+    assert.equal(icon.status, 200);
+    assert.match(icon.headers.get("content-type"), /image\/png/);
   }
   const announcementScript = await fetch(`${baseUrl}/announcement.js`);
   assert.equal(announcementScript.status, 200);
