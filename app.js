@@ -27,6 +27,8 @@ let supportPollTimer = null;
 let supportCallPeer = null;
 let supportLocalAudio = null;
 let supportCallId = "";
+let supportCallGeneration = 0;
+let supportCallStarting = false;
 let supportPollPending = false;
 let supportLastHeartbeatAt = 0;
 let supportSeenSignals = new Set();
@@ -496,6 +498,8 @@ function renderSupportMessages(thread) {
 }
 
 function closeCustomerCall() {
+  supportCallGeneration += 1;
+  supportCallStarting = false;
   if (supportCallPeer) {
     supportCallPeer.onicecandidate = null;
     supportCallPeer.ontrack = null;
@@ -552,6 +556,10 @@ function createCustomerPeer(callId) {
 async function processCustomerCall(call) {
   const status = document.querySelector("#supportCallStatus");
   if (!call) {
+    if (supportCallStarting) {
+      status.textContent = "Starting your audio call...";
+      return;
+    }
     status.textContent = "Our team is available to help.";
     closeCustomerCall();
     supportCallId = "";
@@ -630,17 +638,38 @@ document.querySelector("#startSupportCall").addEventListener("click", async even
     setSupportFeedback("Audio calling needs a supported browser and a secure HTTPS connection.", true);
     return;
   }
+  const setupGeneration = ++supportCallGeneration;
+  let localAudio = null;
   button.disabled = true;
+  supportCallStarting = true;
   try {
-    supportLocalAudio = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    localAudio = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    if (setupGeneration !== supportCallGeneration) {
+      localAudio.getTracks().forEach(track => track.stop());
+      return;
+    }
+    supportLocalAudio = localAudio;
     const { call } = await appRequest("/api/support/calls", {
       method: "POST",
       body: JSON.stringify({ action: "start" })
     });
+    if (setupGeneration !== supportCallGeneration) {
+      localAudio.getTracks().forEach(track => track.stop());
+      try {
+        await appRequest("/api/support/calls", {
+          method: "POST",
+          body: JSON.stringify({ action: "end", callId: call.id })
+        });
+      } catch (cleanupError) {
+        console.error("Could not end the support call after setup was canceled:", cleanupError);
+      }
+      return;
+    }
+    supportCallStarting = false;
     supportCallId = call.id;
     supportSeenSignals = new Set();
     createCustomerPeer(call.id);
-    supportLocalAudio.getTracks().forEach(track => supportCallPeer.addTrack(track, supportLocalAudio));
+    localAudio.getTracks().forEach(track => supportCallPeer.addTrack(track, localAudio));
     const offer = await supportCallPeer.createOffer();
     await supportCallPeer.setLocalDescription(offer);
     await sendCustomerSignal(call.id, "offer", offer.sdp);
@@ -650,6 +679,13 @@ document.querySelector("#startSupportCall").addEventListener("click", async even
     setSupportFeedback("Allow microphone access and keep this page open while you call.");
     await loadCustomerSupport();
   } catch (error) {
+    if (setupGeneration !== supportCallGeneration) {
+      if (localAudio && localAudio !== supportLocalAudio) {
+        localAudio.getTracks().forEach(track => track.stop());
+      }
+      return;
+    }
+    supportCallStarting = false;
     closeCustomerCall();
     if (supportCallId) {
       try {
@@ -664,6 +700,7 @@ document.querySelector("#startSupportCall").addEventListener("click", async even
     supportCallId = "";
     setSupportFeedback(error.message, true);
   } finally {
+    if (setupGeneration === supportCallGeneration) supportCallStarting = false;
     button.disabled = false;
   }
 });

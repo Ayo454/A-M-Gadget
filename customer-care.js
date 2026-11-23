@@ -15,6 +15,7 @@ let careSelectedThread = null;
 let careCallPeer = null;
 let careLocalAudio = null;
 let careCallId = "";
+let careCallGeneration = 0;
 let careLastHeartbeatAt = 0;
 let careSeenSignals = new Set();
 let carePendingCandidates = [];
@@ -201,6 +202,7 @@ async function loadCareInbox() {
 }
 
 function closeCareCall() {
+  careCallGeneration += 1;
   if (careCallPeer) {
     careCallPeer.onicecandidate = null;
     careCallPeer.ontrack = null;
@@ -292,28 +294,48 @@ document.querySelector("#answerCareCall").addEventListener("click", async event 
   const call = careSelectedThread.call;
   const offer = call.signals.find(signal => signal.type === "offer" && signal.senderRole === "customer");
   if (!offer) return;
+  const customerId = careSelectedId;
+  const setupGeneration = ++careCallGeneration;
+  let localAudio = null;
+  let peer = null;
   button.disabled = true;
   try {
-    careLocalAudio = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    localAudio = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    if (setupGeneration !== careCallGeneration || customerId !== careSelectedId) {
+      localAudio.getTracks().forEach(track => track.stop());
+      return;
+    }
+    careLocalAudio = localAudio;
     careCallId = call.id;
     createCarePeer(call.id);
-    careLocalAudio.getTracks().forEach(track => careCallPeer.addTrack(track, careLocalAudio));
-    await careCallPeer.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: offer.payload }));
+    peer = careCallPeer;
+    localAudio.getTracks().forEach(track => peer.addTrack(track, localAudio));
+    await peer.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: offer.payload }));
+    if (setupGeneration !== careCallGeneration || careCallPeer !== peer) return;
     const candidates = carePendingCandidates;
     carePendingCandidates = [];
     for (const candidate of candidates) await addCareRemoteCandidate(candidate);
-    const answer = await careCallPeer.createAnswer();
-    await careCallPeer.setLocalDescription(answer);
+    if (setupGeneration !== careCallGeneration || careCallPeer !== peer) return;
+    const answer = await peer.createAnswer();
+    await peer.setLocalDescription(answer);
+    if (setupGeneration !== careCallGeneration || careCallPeer !== peer) return;
     await sendCareSignal(call.id, "answer", answer.sdp);
+    if (setupGeneration !== careCallGeneration || careCallPeer !== peer) return;
     document.querySelector("#careCallStatus").textContent = "Connecting to the customer...";
     button.hidden = true;
     showCareFeedback("");
   } catch (error) {
+    if (setupGeneration !== careCallGeneration) {
+      if (localAudio && localAudio !== careLocalAudio) {
+        localAudio.getTracks().forEach(track => track.stop());
+      }
+      return;
+    }
     closeCareCall();
     try {
       await careRequest("/api/support/calls", {
         method: "POST",
-        body: JSON.stringify({ action: "end", callId: call.id, customerId: careSelectedId })
+        body: JSON.stringify({ action: "end", callId: call.id, customerId })
       });
     } catch (cleanupError) {
       console.error("Could not end the support call after answering failed:", cleanupError);
