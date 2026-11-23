@@ -103,13 +103,20 @@ test("serves the store and keeps the data files private", async t => {
   assert.match(shopAppHtml, /data-app-loader/);
   assert.match(shopAppHtml, /mobile-web-app-capable/);
   assert.match(shopAppHtml, /apple-mobile-web-app-capable/);
-  for (const manifestPath of ["/app.webmanifest", "/rider.webmanifest", "/admin.webmanifest"]) {
+  const customerCarePage = await fetch(`${baseUrl}/customercare`);
+  assert.equal(customerCarePage.status, 200);
+  assert.match(await customerCarePage.text(), /Customer care inbox/);
+  const oldCustomerCarePage = await fetch(`${baseUrl}/customer-care`, { redirect: "manual" });
+  assert.equal(oldCustomerCarePage.status, 308);
+  assert.equal(oldCustomerCarePage.headers.get("location"), "/customercare");
+  for (const manifestPath of ["/app.webmanifest", "/customer-care.webmanifest", "/rider.webmanifest", "/admin.webmanifest"]) {
     const manifestResponse = await fetch(`${baseUrl}${manifestPath}`);
     assert.equal(manifestResponse.status, 200);
     assert.match(manifestResponse.headers.get("content-type"), /application\/manifest\+json/);
     const manifest = await manifestResponse.json();
     assert.equal(typeof manifest.start_url, "string");
     assert.equal(manifest.display, "standalone");
+    if (manifestPath === "/customer-care.webmanifest") assert.equal(manifest.start_url, "/customercare");
     if (manifestPath === "/admin.webmanifest") assert.equal(manifest.start_url, "/admin");
   }
   const announcementScript = await fetch(`${baseUrl}/announcement.js`);
@@ -150,6 +157,110 @@ test("serves the store and keeps the data files private", async t => {
   assert.equal(privateData.status, 404);
   const serverSource = await fetch(`${baseUrl}/server.js`);
   assert.equal(serverSource.status, 404);
+});
+
+test("keeps customer support messages and audio-call signaling private to the customer and admin", async t => {
+  const app = await createTestApp(t);
+  const baseUrl = await app.listen();
+  const registration = await jsonRequest(`${baseUrl}/api/auth/register`, "POST", {
+    name: "Support Customer",
+    email: "support@example.com",
+    password: "customer-password",
+    phone: "+234 801 234 5678",
+    address: "12 Example Road, Ilishan-Remo"
+  });
+  assert.equal(registration.status, 201);
+  const customerCookie = sessionCookie(registration);
+  const adminLogin = await jsonRequest(`${baseUrl}/api/admin/login`, "POST", {
+    email: "owner@example.com",
+    password: "test-admin-password"
+  });
+  assert.equal(adminLogin.status, 200);
+  const adminCookie = sessionCookie(adminLogin);
+
+  const unauthorizedInbox = await jsonRequest(`${baseUrl}/api/admin/support`);
+  assert.equal(unauthorizedInbox.status, 403);
+  const firstMessage = await jsonRequest(`${baseUrl}/api/support/messages`, "POST", { text: "Can you help me?" }, customerCookie);
+  assert.equal(firstMessage.status, 201);
+  const inbox = await jsonRequest(`${baseUrl}/api/admin/support`, "GET", undefined, adminCookie);
+  assert.equal(inbox.status, 200);
+  const [threadSummary] = await inbox.json();
+  assert.equal(threadSummary.lastMessage, "Can you help me?");
+
+  const adminReply = await jsonRequest(`${baseUrl}/api/admin/support/messages`, "POST", {
+    customerId: threadSummary.customerId,
+    text: "Yes, how can we help?"
+  }, adminCookie);
+  assert.equal(adminReply.status, 201);
+  const customerThread = await jsonRequest(`${baseUrl}/api/support`, "GET", undefined, customerCookie);
+  assert.equal((await customerThread.json()).thread.messages.length, 2);
+
+  const startedCall = await jsonRequest(`${baseUrl}/api/support/calls`, "POST", { action: "start" }, customerCookie);
+  assert.equal(startedCall.status, 201);
+  const call = (await startedCall.json()).call;
+  const offer = await jsonRequest(`${baseUrl}/api/support/calls/${call.id}/signals`, "POST", {
+    type: "offer",
+    payload: "customer offer sdp"
+  }, customerCookie);
+  assert.equal(offer.status, 201);
+  const careThread = await jsonRequest(
+    `${baseUrl}/api/admin/support/${threadSummary.customerId}`,
+    "GET",
+    undefined,
+    adminCookie
+  );
+  assert.equal((await careThread.json()).thread.call.signals[0].type, "offer");
+
+  const adminAnswer = await jsonRequest(
+    `${baseUrl}/api/support/calls/${call.id}/signals?customerId=${encodeURIComponent(threadSummary.customerId)}`,
+    "POST",
+    { type: "answer", payload: "admin answer sdp" },
+    adminCookie
+  );
+  assert.equal(adminAnswer.status, 201);
+  const answer = await jsonRequest(`${baseUrl}/api/support/calls/${call.id}/signals`, "GET", undefined, customerCookie);
+  assert.equal((await answer.json()).call.status, "active");
+
+  const endedCall = await jsonRequest(`${baseUrl}/api/support/calls`, "POST", {
+    action: "end",
+    callId: call.id,
+    customerId: threadSummary.customerId
+  }, adminCookie);
+  assert.equal(endedCall.status, 200);
+  const finalThread = await jsonRequest(`${baseUrl}/api/support`, "GET", undefined, customerCookie);
+  assert.equal((await finalThread.json()).thread.call.status, "ended");
+
+  const abandonedCallResponse = await jsonRequest(`${baseUrl}/api/support/calls`, "POST", { action: "start" }, customerCookie);
+  const abandonedCall = (await abandonedCallResponse.json()).call;
+  const supportPath = path.join(app.dataDirectory, "support.json");
+  const supportRecords = JSON.parse(await fs.readFile(supportPath, "utf8"));
+  supportRecords[0].call.startedAt = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  await fs.writeFile(supportPath, JSON.stringify(supportRecords));
+  const expiredCall = await jsonRequest(`${baseUrl}/api/support`, "GET", undefined, customerCookie);
+  assert.equal((await expiredCall.json()).thread.call.status, "ended");
+
+  const activeCallResponse = await jsonRequest(`${baseUrl}/api/support/calls`, "POST", { action: "start" }, customerCookie);
+  const activeCall = (await activeCallResponse.json()).call;
+  await jsonRequest(`${baseUrl}/api/support/calls/${activeCall.id}/signals`, "POST", {
+    type: "offer",
+    payload: "customer offer sdp"
+  }, customerCookie);
+  await jsonRequest(
+    `${baseUrl}/api/support/calls/${activeCall.id}/signals?customerId=${encodeURIComponent(threadSummary.customerId)}`,
+    "POST",
+    { type: "answer", payload: "admin answer sdp" },
+    adminCookie
+  );
+  const activeSupportRecords = JSON.parse(await fs.readFile(supportPath, "utf8"));
+  activeSupportRecords[0].call.lastActivityAt = new Date(Date.now() - 60 * 1000).toISOString();
+  await fs.writeFile(supportPath, JSON.stringify(activeSupportRecords));
+  const staleHeartbeat = await jsonRequest(`${baseUrl}/api/support/calls`, "POST", {
+    action: "heartbeat",
+    callId: activeCall.id
+  }, customerCookie);
+  assert.equal(staleHeartbeat.status, 409);
+  const expiredActiveCall = await jsonRequest(`${baseUrl}/api/support`, "GET", undefined, customerCookie);
+  assert.equal((await expiredActiveCall.json()).thread.call.status, "ended");
 });
 
 test("registers customers and stores only salted password hashes", async t => {
@@ -572,8 +683,10 @@ test("adds security headers, rejects cross-origin mutations, and limits failed l
   assert.equal(shopPage.headers.get("x-content-type-options"), "nosniff");
   assert.equal(shopPage.headers.get("x-powered-by"), null);
   assert.equal(shopPage.headers.get("cross-origin-opener-policy"), "same-origin");
+  assert.match(shopPage.headers.get("permissions-policy"), /microphone=\(self\)/);
   assert.match(shopPage.headers.get("content-security-policy"), /frame-ancestors 'none'/);
   assert.match(shopPage.headers.get("content-security-policy"), /script-src 'self' 'sha256-BkKP2XO6WOEc3kXOiLr2ZoY83hamalKjPY9xBcbXVuw='/);
+  assert.match(shopPage.headers.get("content-security-policy"), /stun:/);
   const products = await fetch(`${baseUrl}/api/products`);
   assert.equal(products.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
 

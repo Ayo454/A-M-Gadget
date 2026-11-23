@@ -1,6 +1,6 @@
 create table if not exists public.app_store (
   collection text primary key
-    check (collection in ('products', 'users', 'orders', 'sessions', 'riders', 'payout_requests')),
+    check (collection in ('products', 'users', 'orders', 'sessions', 'riders', 'payout_requests', 'support')),
   records jsonb not null default '[]'::jsonb
     check (jsonb_typeof(records) = 'array'),
   updated_at timestamptz not null default now()
@@ -8,7 +8,7 @@ create table if not exists public.app_store (
 
 alter table public.app_store drop constraint if exists app_store_collection_check;
 alter table public.app_store add constraint app_store_collection_check
-  check (collection in ('products', 'users', 'orders', 'sessions', 'riders', 'payout_requests'));
+  check (collection in ('products', 'users', 'orders', 'sessions', 'riders', 'payout_requests', 'support'));
 alter table public.app_store enable row level security;
 revoke all on table public.app_store from anon, authenticated;
 grant select, insert, update, delete on table public.app_store to service_role;

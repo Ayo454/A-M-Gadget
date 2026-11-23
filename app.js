@@ -23,6 +23,14 @@ let quoteVersion = 0;
 let activeQuoteKey = "";
 let paymentOrderId = "";
 let quoteTimer = null;
+let supportPollTimer = null;
+let supportCallPeer = null;
+let supportLocalAudio = null;
+let supportCallId = "";
+let supportPollPending = false;
+let supportLastHeartbeatAt = 0;
+let supportSeenSignals = new Set();
+let supportPendingCandidates = [];
 
 async function appRequest(url, options = {}) {
   const response = await fetch(url, {
@@ -87,6 +95,25 @@ function showAppView(view) {
     button.setAttribute("aria-current", active ? "page" : "false");
   });
   if (view === "orders") loadAppOrders().catch(error => setAppFeedback(error.message, true));
+  if (view === "support") {
+    if (!appUser) {
+      setSupportFeedback("Sign in or create an account to chat or call customer care.");
+      openAuth("login");
+      return;
+    }
+    loadCustomerSupport().catch(error => setSupportFeedback(error.message, true));
+    window.clearInterval(supportPollTimer);
+    supportPollTimer = window.setInterval(() => {
+      loadCustomerSupport().catch(error => setSupportFeedback(error.message, true));
+    }, 2500);
+  } else {
+    window.clearInterval(supportPollTimer);
+    supportPollTimer = appUser && supportCallId
+      ? window.setInterval(() => {
+        loadCustomerSupport().catch(error => setSupportFeedback(error.message, true));
+      }, 2500)
+      : null;
+  }
 }
 
 function setAuthMode(mode) {
@@ -417,6 +444,8 @@ function refreshAccountPanel() {
   guest.hidden = Boolean(appUser);
   account.hidden = !appUser;
   document.querySelector("#appSignIn").hidden = Boolean(appUser);
+  document.querySelector("#supportMessageForm").hidden = !appUser;
+  document.querySelector("#startSupportCall").disabled = !appUser;
   if (!appUser) return;
   document.querySelector("#appGreeting").textContent = `Hello, ${appUser.name.split(/\s+/)[0]}`;
   document.querySelector("#appAccountName").textContent = appUser.name;
@@ -431,7 +460,229 @@ async function setAppUser(user) {
   appShell.hidden = false;
   refreshAccountPanel();
   await loadAppOrders();
+  if (new URLSearchParams(window.location.search).get("view") === "support") showAppView("support");
 }
+
+function setSupportFeedback(message, isError = false) {
+  const feedback = document.querySelector("#supportFeedback");
+  feedback.textContent = message;
+  feedback.classList.toggle("error", isError);
+}
+
+function renderSupportMessages(thread) {
+  const list = document.querySelector("#supportMessages");
+  list.replaceChildren();
+  if (!thread.messages.length) {
+    const empty = document.createElement("p");
+    empty.className = "app-empty";
+    empty.textContent = "Send a message to start a conversation with customer care.";
+    list.append(empty);
+    return;
+  }
+  thread.messages.forEach(message => {
+    const bubble = document.createElement("article");
+    const sender = document.createElement("strong");
+    const text = document.createElement("p");
+    const time = document.createElement("time");
+    bubble.className = `app-support-message ${message.senderRole === "customer" ? "mine" : ""}`;
+    sender.textContent = message.senderRole === "customer" ? "You" : "Customer care";
+    text.textContent = message.text;
+    time.dateTime = message.createdAt;
+    time.textContent = new Date(message.createdAt).toLocaleString();
+    bubble.append(sender, text, time);
+    list.append(bubble);
+  });
+  list.scrollTop = list.scrollHeight;
+}
+
+function closeCustomerCall() {
+  if (supportCallPeer) {
+    supportCallPeer.onicecandidate = null;
+    supportCallPeer.ontrack = null;
+    supportCallPeer.close();
+    supportCallPeer = null;
+  }
+  if (supportLocalAudio) {
+    supportLocalAudio.getTracks().forEach(track => track.stop());
+    supportLocalAudio = null;
+  }
+  supportPendingCandidates = [];
+  document.querySelector("#supportRemoteAudio").srcObject = null;
+  document.querySelector("#endSupportCall").hidden = true;
+  document.querySelector("#startSupportCall").hidden = false;
+}
+
+function sendCustomerSignal(callId, type, payload) {
+  return appRequest(`/api/support/calls/${encodeURIComponent(callId)}/signals`, {
+    method: "POST",
+    body: JSON.stringify({ type, payload })
+  });
+}
+
+async function addCustomerRemoteCandidate(candidate) {
+  if (!supportCallPeer || !supportCallPeer.remoteDescription) {
+    supportPendingCandidates.push(candidate);
+    return;
+  }
+  await supportCallPeer.addIceCandidate(new RTCIceCandidate(candidate));
+}
+
+function createCustomerPeer(callId) {
+  supportCallPeer = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  });
+  supportCallPeer.onicecandidate = event => {
+    if (!event.candidate) return;
+    sendCustomerSignal(callId, "candidate", event.candidate.toJSON())
+      .catch(error => setSupportFeedback(error.message, true));
+  };
+  supportCallPeer.ontrack = event => {
+    document.querySelector("#supportRemoteAudio").srcObject = event.streams[0];
+  };
+  supportCallPeer.onconnectionstatechange = () => {
+    if (supportCallPeer && supportCallPeer.connectionState === "connected") {
+      document.querySelector("#supportCallStatus").textContent = "Connected to customer care.";
+    }
+    if (supportCallPeer && ["failed", "disconnected"].includes(supportCallPeer.connectionState)) {
+      document.querySelector("#supportCallStatus").textContent = "Call connection lost. End the call and try again.";
+    }
+  };
+}
+
+async function processCustomerCall(call) {
+  const status = document.querySelector("#supportCallStatus");
+  if (!call) {
+    status.textContent = "Our team is available to help.";
+    closeCustomerCall();
+    supportCallId = "";
+    return;
+  }
+  if (supportCallId && supportCallId !== call.id) closeCustomerCall();
+  supportCallId = call.id;
+  if (call.status === "ended") {
+    status.textContent = "Call ended.";
+    closeCustomerCall();
+    supportCallId = "";
+    return;
+  }
+  document.querySelector("#startSupportCall").hidden = true;
+  document.querySelector("#endSupportCall").hidden = false;
+  status.textContent = call.status === "active" ? "Connecting your audio call..." : "Calling customer care...";
+  for (const signal of call.signals) {
+    if (signal.senderRole === "customer" || supportSeenSignals.has(signal.id)) continue;
+    supportSeenSignals.add(signal.id);
+    if (signal.type === "answer" && supportCallPeer && !supportCallPeer.remoteDescription) {
+      await supportCallPeer.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: signal.payload }));
+      const candidates = supportPendingCandidates;
+      supportPendingCandidates = [];
+      for (const candidate of candidates) await addCustomerRemoteCandidate(candidate);
+    } else if (signal.type === "candidate") {
+      await addCustomerRemoteCandidate(signal.payload);
+    }
+  }
+}
+
+async function loadCustomerSupport() {
+  if (!appUser || supportPollPending) return;
+  supportPollPending = true;
+  try {
+    const { thread } = await appRequest("/api/support");
+    renderSupportMessages(thread);
+    await processCustomerCall(thread.call);
+    if (thread.call && thread.call.status === "active" && supportCallPeer &&
+        ["connecting", "connected"].includes(supportCallPeer.connectionState) &&
+        Date.now() - supportLastHeartbeatAt >= 10000) {
+      supportLastHeartbeatAt = Date.now();
+      await appRequest("/api/support/calls", {
+        method: "POST",
+        body: JSON.stringify({ action: "heartbeat", callId: thread.call.id })
+      });
+    }
+  } finally {
+    supportPollPending = false;
+  }
+}
+
+document.querySelector("#supportMessageForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const input = form.elements.namedItem("text");
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  try {
+    await appRequest("/api/support/messages", {
+      method: "POST",
+      body: JSON.stringify({ text: input.value })
+    });
+    input.value = "";
+    setSupportFeedback("");
+    await loadCustomerSupport();
+  } catch (error) {
+    setSupportFeedback(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#startSupportCall").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) {
+    setSupportFeedback("Audio calling needs a supported browser and a secure HTTPS connection.", true);
+    return;
+  }
+  button.disabled = true;
+  try {
+    supportLocalAudio = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const { call } = await appRequest("/api/support/calls", {
+      method: "POST",
+      body: JSON.stringify({ action: "start" })
+    });
+    supportCallId = call.id;
+    supportSeenSignals = new Set();
+    createCustomerPeer(call.id);
+    supportLocalAudio.getTracks().forEach(track => supportCallPeer.addTrack(track, supportLocalAudio));
+    const offer = await supportCallPeer.createOffer();
+    await supportCallPeer.setLocalDescription(offer);
+    await sendCustomerSignal(call.id, "offer", offer.sdp);
+    document.querySelector("#supportCallStatus").textContent = "Calling customer care...";
+    button.hidden = true;
+    document.querySelector("#endSupportCall").hidden = false;
+    setSupportFeedback("Allow microphone access and keep this page open while you call.");
+    await loadCustomerSupport();
+  } catch (error) {
+    closeCustomerCall();
+    if (supportCallId) {
+      try {
+        await appRequest("/api/support/calls", {
+          method: "POST",
+          body: JSON.stringify({ action: "end", callId: supportCallId })
+        });
+      } catch (cleanupError) {
+        console.error("Could not end the support call after setup failed:", cleanupError);
+      }
+    }
+    supportCallId = "";
+    setSupportFeedback(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#endSupportCall").addEventListener("click", async () => {
+  const callId = supportCallId;
+  closeCustomerCall();
+  if (!callId) return;
+  try {
+    await appRequest("/api/support/calls", {
+      method: "POST",
+      body: JSON.stringify({ action: "end", callId })
+    });
+    document.querySelector("#supportCallStatus").textContent = "Call ended.";
+    supportCallId = "";
+  } catch (error) {
+    setSupportFeedback(error.message, true);
+  }
+});
 
 function showOrderStatus(status) {
   return ({
@@ -797,7 +1048,21 @@ document.querySelector("#finishCheckout").addEventListener("click", () => {
 });
 document.querySelector("#appLogout").addEventListener("click", async () => {
   try {
+    if (supportCallId) {
+      try {
+        await appRequest("/api/support/calls", {
+          method: "POST",
+          body: JSON.stringify({ action: "end", callId: supportCallId })
+        });
+      } catch (callError) {
+        console.error("Could not end the support call before signing out:", callError);
+      }
+    }
     await appRequest("/api/auth/logout", { method: "POST", body: "{}" });
+    window.clearInterval(supportPollTimer);
+    supportPollTimer = null;
+    closeCustomerCall();
+    supportCallId = "";
     appUser = null;
     refreshAccountPanel();
     renderOrders([]);
@@ -826,6 +1091,7 @@ appRequest("/api/auth/session")
       appUser = null;
       refreshAccountPanel();
       renderOrders([]);
+      if (new URLSearchParams(window.location.search).get("view") === "support") showAppView("support");
     }
   })
   .catch(error => {

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111118">
+  <meta name="description" content="Customer care inbox for A&M Gadget.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="A&amp;M Care">
+  <title>Customer Care | A&amp;M Gadget</title>
+  <link rel="manifest" href="/customer-care.webmanifest">
+  <link rel="icon" href="/app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app-loader.css">
+  <link rel="stylesheet" href="/app-shell.css">
+  <link rel="stylesheet" href="/customer-care.css">
+</head>
+<body class="customer-care-app">
+  <div class="app-launch-screen" data-app-loader role="status" aria-live="polite">
+    <span class="app-launch-mark" aria-hidden="true">A&amp;M</span>
+    <span class="app-launch-spinner" aria-hidden="true"></span>
+    <p>Loading customer care...</p>
+  </div>
+  <header class="app-topbar">
+    <a class="app-brand" href="/admin" aria-label="Return to admin dashboard">
+      <img src="/app-icon.svg" alt="" width="38" height="38">
+      <div><strong>A&amp;M Gadget</strong><small>Customer care</small></div>
+    </a>
+    <p class="app-topbar-status" data-pwa-status role="status" aria-live="polite"></p>
+    <button class="app-install-button" type="button" data-install-app hidden>Install app</button>
+    <button class="care-sign-out" id="careSignOut" type="button" hidden>Sign out</button>
+  </header>
+  <main class="care-main">
+    <p class="care-feedback" id="careFeedback" role="status" aria-live="polite"></p>
+    <section class="care-login" id="careLogin">
+      <span class="app-kicker">PRIVATE CUSTOMER SUPPORT</span>
+      <h1>Customer care inbox</h1>
+      <p>Sign in with the store admin account to receive and respond to customer messages and audio calls.</p>
+      <form class="app-form" id="careLoginForm">
+        <label>Admin email<input name="email" type="email" autocomplete="username" maxlength="254" required></label>
+        <label>Admin password<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
+        <button class="app-primary-button" type="submit">Sign in to customer care</button>
+      </form>
+      <a href="/admin">← Return to the admin dashboard</a>
+    </section>
+    <section class="care-workspace" id="careWorkspace" hidden>
+      <aside class="care-inbox">
+        <div class="care-inbox-heading"><div><span class="app-kicker">CUSTOMER CARE</span><h1>Inbox</h1></div><button id="careRefresh" type="button" aria-label="Refresh conversations">↻</button></div>
+        <p class="care-inbox-summary" id="careInboxSummary">Loading conversations...</p>
+        <div class="care-thread-list" id="careThreadList" aria-label="Customer conversations"></div>
+        <a href="/admin" class="care-admin-link">← Admin dashboard</a>
+      </aside>
+      <section class="care-conversation" aria-label="Selected conversation">
+        <div class="care-empty" id="careEmpty"><strong>Select a conversation</strong><p>Customer messages and call requests will appear in your inbox.</p></div>
+        <div class="care-chat" id="careChat" hidden>
+          <header class="care-chat-header">
+            <div><span class="app-kicker">CUSTOMER CONVERSATION</span><h2 id="careCustomerName">Customer</h2><p id="careCustomerContact"></p></div>
+            <div class="care-call-actions">
+              <span id="careCallStatus" role="status">No active call</span>
+              <button type="button" class="app-primary-button" id="answerCareCall" hidden>Answer call</button>
+              <button type="button" class="app-secondary-button" id="endCareCall" hidden>End call</button>
+            </div>
+          </header>
+          <audio id="careRemoteAudio" autoplay></audio>
+          <div class="care-messages" id="careMessages" aria-live="polite"></div>
+          <form class="care-message-form" id="careMessageForm">
+            <label class="sr-only" for="careMessageInput">Reply to customer</label>
+            <textarea id="careMessageInput" name="text" rows="2" maxlength="2000" placeholder="Write a reply..." required></textarea>
+            <button type="submit" class="app-primary-button">Send reply</button>
+          </form>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="/pwa.js"></script>
+  <script src="/customer-care.js"></script>
+</body>
+</html>

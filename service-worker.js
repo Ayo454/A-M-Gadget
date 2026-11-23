@@ -1,14 +1,19 @@
-const CACHE_NAME = "am-gadget-app-shell-v4";
+const CACHE_NAME = "am-gadget-app-shell-v6";
 const APP_SHELL = [
   "/app.html",
+  "/customercare",
+  "/customer-care.app.html",
   "/rider.app.html",
   "/admin",
   "/app.webmanifest",
+  "/customer-care.webmanifest",
   "/rider.webmanifest",
   "/admin.webmanifest",
   "/app-shell.css",
+  "/customer-care.css",
   "/styles.css",
   "/app.js",
+  "/customer-care.js",
   "/rider.js",
   "/admin.js",
   "/pwa.js",
@@ -16,11 +21,13 @@ const APP_SHELL = [
   "/app-icon.svg",
   "/rider-icon.svg"
 ];
-const APP_PAGES = new Set(["/app", "/app.html", "/rider", "/rider.html", "/rider.app.html", "/admin", "/admin.html"]);
+const APP_PAGES = new Set(["/app", "/app.html", "/customercare", "/customer-care", "/customer-care.app.html", "/rider", "/rider.html", "/rider.app.html", "/admin", "/admin.html"]);
 const STATIC_ASSETS = new Set([
   "/app-shell.css",
+  "/customer-care.css",
   "/styles.css",
   "/app.js",
+  "/customer-care.js",
   "/rider.js",
   "/admin.js",
   "/pwa.js",
@@ -28,6 +35,7 @@ const STATIC_ASSETS = new Set([
   "/app-icon.svg",
   "/rider-icon.svg",
   "/app.webmanifest",
+  "/customer-care.webmanifest",
   "/rider.webmanifest",
   "/admin.webmanifest"
 ]);

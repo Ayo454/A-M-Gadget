@@ -70,6 +70,7 @@
           <button type="button" data-app-view="orders"><span>▤</span> My orders</button>
           <button type="button" data-app-view="bag"><span>▢</span> Shopping bag</button>
           <button type="button" data-app-view="account"><span>○</span> Account</button>
+          <button type="button" data-app-view="support"><span>✉</span> Customer care</button>
         </nav>
         <div class="app-sidebar-bottom">
           <span class="app-status-dot"></span>
@@ -126,6 +127,29 @@
             <button type="button" class="app-secondary-button" id="appLogout">Sign out</button>
           </div>
         </section>
+
+        <section class="app-panel" data-app-panel="support" hidden>
+          <div class="app-page-heading">
+            <div><span class="app-kicker">WE’RE HERE TO HELP</span><h1>Customer care</h1><p>Send us a message or start a private audio call with our team.</p></div>
+          </div>
+          <section class="app-support-card">
+            <div class="app-support-call">
+              <div><strong>Audio call</strong><p id="supportCallStatus">Our team is available to help.</p></div>
+              <button type="button" class="app-primary-button" id="startSupportCall">Call customer care</button>
+              <button type="button" class="app-secondary-button" id="endSupportCall" hidden>End call</button>
+            </div>
+            <audio id="supportRemoteAudio" autoplay></audio>
+            <div class="app-support-messages" id="supportMessages" aria-live="polite">
+              <p class="app-empty">Sign in to contact customer care.</p>
+            </div>
+            <form class="app-support-form" id="supportMessageForm">
+              <label class="sr-only" for="supportMessageInput">Your message</label>
+              <textarea id="supportMessageInput" name="text" rows="2" maxlength="2000" placeholder="Write a message..." required></textarea>
+              <button type="submit" class="app-primary-button">Send message</button>
+            </form>
+            <p class="app-support-feedback" id="supportFeedback" role="status" aria-live="polite"></p>
+          </section>
+        </section>
       </div>
       <nav class="app-mobile-nav" aria-label="App navigation">
         <button type="button" class="active" data-app-view="shop"><span>⌂</span>Shop</button>
@@ -135,6 +159,7 @@
           Bag
         </button>
         <button type="button" data-app-view="account"><span>○</span>Account</button>
+        <button type="button" data-app-view="support"><span>✉</span>Help</button>
       </nav>
     </section>
   </main>

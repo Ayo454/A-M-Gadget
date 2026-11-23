@@ -118,6 +118,27 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .app-guest-card { display:grid; justify-items:start; gap:10px; max-width:540px; padding:17px; border:1px solid var(--app-line); border-radius:11px; background:white; }
 .app-guest-card p { margin:0 0 3px; color:var(--app-muted); font-size:10px; line-height:1.6; }
 .app-guest-card button { min-width:130px; }
+.app-support-card { max-width:860px; overflow:hidden; border:1px solid var(--app-line); border-radius:12px; background:white; }
+.app-support-call { display:flex; align-items:center; gap:10px; padding:16px; border-bottom:1px solid var(--app-line); }
+.app-support-call > div { flex:1; }
+.app-support-call strong { font-size:11px; }
+.app-support-call p { margin:4px 0 0; color:var(--app-muted); font-size:9px; }
+.app-support-call button { min-height:36px; font-size:9px; }
+.app-support-messages { min-height:240px; max-height:440px; display:flex; flex-direction:column; gap:9px; overflow:auto; padding:16px; }
+.app-support-message { max-width:min(82%,540px); align-self:flex-start; padding:10px 12px; border-radius:10px 10px 10px 3px; background:#f1f3eb; }
+.app-support-message.mine { align-self:flex-end; border-radius:10px 10px 3px 10px; background:#eaffb2; }
+.app-support-message strong { display:block; margin-bottom:4px; font-size:8px; }
+.app-support-message p { margin:0; color:#393d35; font-size:10px; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; }
+.app-support-message time { display:block; margin-top:5px; color:var(--app-muted); font-size:8px; text-align:right; }
+.app-support-form { display:flex; align-items:flex-end; gap:9px; padding:12px; border-top:1px solid var(--app-line); }
+.app-support-form textarea { flex:1; min-height:42px; max-height:120px; resize:vertical; padding:10px 11px; border:1px solid var(--app-line); border-radius:8px; color:var(--app-ink); font:inherit; font-size:10px; }
+.app-support-form button { min-height:42px; }
+.app-support-feedback { min-height:0; margin:0; padding:0 12px; color:#52632c; font-size:9px; }
+.app-support-feedback:not(:empty) { padding-bottom:12px; }
+.app-support-feedback.error { color:#a83232; }
+.app-support-form[hidden] { display:none; }
+.app-sidebar .app-side-nav button[data-app-view="support"] { margin-top:8px; border-top:1px solid var(--app-line); border-radius:0 0 8px 8px; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .app-product-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; }
 .app-product-card { min-width:0; overflow:hidden; border:1px solid var(--app-line); border-radius:11px; background:white; transition:transform .18s ease, box-shadow .18s ease; }
 .app-product-card:hover { transform:translateY(-2px); box-shadow:0 10px 25px rgba(15,18,8,.08); }
@@ -297,7 +318,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .app-sidebar { display:none; }
   .app-toolbar { top:68px; }
   .app-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .app-mobile-nav { position:fixed; right:12px; bottom:max(10px,env(safe-area-inset-bottom)); left:12px; z-index:30; display:grid; grid-template-columns:repeat(4,1fr); gap:5px; padding:7px; border:1px solid var(--app-line); border-radius:13px; background:rgba(255,255,255,.95); box-shadow:0 8px 26px rgba(0,0,0,.12); backdrop-filter:blur(16px); }
+  .app-mobile-nav { position:fixed; right:12px; bottom:max(10px,env(safe-area-inset-bottom)); left:12px; z-index:30; display:grid; grid-template-columns:repeat(5,1fr); gap:5px; padding:7px; border:1px solid var(--app-line); border-radius:13px; background:rgba(255,255,255,.95); box-shadow:0 8px 26px rgba(0,0,0,.12); backdrop-filter:blur(16px); }
   .app-mobile-nav button { min-height:42px; display:grid; justify-items:center; gap:2px; border:0; border-radius:8px; background:transparent; color:#777b83; font-size:8px; font-weight:900; }
   .app-mobile-nav button span { font-size:15px; }
   .app-mobile-nav button .app-mobile-nav-icon { position:relative; width:20px; display:grid; place-items:center; font-size:15px; }

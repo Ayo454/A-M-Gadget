@@ -36,8 +36,8 @@ const securityHeaders = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-BkKP2XO6WOEc3kXOiLr2ZoY83hamalKjPY9xBcbXVuw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; manifest-src 'self'; worker-src 'self'"
+  "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
+  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-BkKP2XO6WOEc3kXOiLr2ZoY83hamalKjPY9xBcbXVuw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com stun: turn: turns:; manifest-src 'self'; worker-src 'self'"
 };
 const defaultProducts = [
   { id: "volt-one-ultra", name: "Volt One Ultra", category: "Smartphones", description: "A premium everyday phone with a vivid display, a versatile camera system, and fast performance for work and entertainment.", price: 899, oldPrice: 999, type: "phone", image: "/images/products/phone.jpg", stock: 12, badge: "New" },
@@ -696,9 +696,75 @@ function createServer(options = {}) {
       } finally {
         clearTimeout(timeout);
       }
+
     });
     openMapQueue = operation.then(() => undefined, () => undefined);
     return operation;
+  }
+
+  async function getSupportThread(customerId, create = false) {
+    const [users, threads] = await Promise.all([
+      readStore("users.json", []),
+      readStore("support.json", [])
+    ]);
+    const customer = users.find(user => user.id === customerId);
+    if (!customer) throw Object.assign(new Error("Customer account not found."), { status: 404 });
+    let thread = threads.find(item => item.customerId === customerId);
+    if (!thread && create) {
+      thread = await mutateStore("support.json", [], records => {
+        let current = records.find(item => item.customerId === customerId);
+        if (!current) {
+          current = { customerId, messages: [], call: null, updatedAt: new Date().toISOString() };
+          records.push(current);
+        }
+        return current;
+      });
+    }
+    return {
+      customer,
+      thread: thread || { customerId, messages: [], call: null, updatedAt: null }
+    };
+  }
+
+  function supportThreadView(thread, customer) {
+    return {
+      customerId: thread.customerId,
+      customerName: customer.name,
+      customerEmail: customer.email,
+      customerPhone: customer.phone || "",
+      messages: thread.messages,
+      call: thread.call || null,
+      updatedAt: thread.updatedAt || null
+    };
+  }
+
+  function isSupportCallExpired(call) {
+    if (!call || !["ringing", "active"].includes(call.status)) return false;
+    const lastActivity = call.status === "ringing"
+      ? Date.parse(call.startedAt)
+      : Date.parse(call.lastActivityAt || call.startedAt);
+    const timeout = call.status === "ringing" ? 60 * 1000 : 40 * 1000;
+    return Number.isFinite(lastActivity) && Date.now() - lastActivity > timeout;
+  }
+
+  async function expireSupportCall(thread) {
+    if (!isSupportCallExpired(thread.call)) return thread.call;
+    const callId = thread.call.id;
+    const endedAt = new Date().toISOString();
+    const endedCall = await mutateStore("support.json", [], records => {
+      const current = records.find(item => item.customerId === thread.customerId);
+      if (!current || !current.call || current.call.id !== callId || !isSupportCallExpired(current.call)) {
+        return current && current.call;
+      }
+      current.call.status = "ended";
+      current.call.endedAt = endedAt;
+      current.call.signals = [];
+      current.updatedAt = endedAt;
+      return current.call;
+    });
+    thread.call = endedCall;
+    thread.updatedAt = endedCall && endedCall.endedAt || thread.updatedAt;
+    return thread.call;
   }
 
   async function getCoordinates(address) {
@@ -1010,6 +1076,271 @@ function createServer(options = {}) {
 
     if (route === "GET /api/products") {
       jsonResponse(response, 200, await readStore("products.json", defaultProducts));
+      return;
+    }
+
+    if (route === "GET /api/support") {
+      const session = getSession(request);
+      if (!session || session.user.role !== "customer") {
+        jsonResponse(response, 401, { error: "Sign in to contact customer care." });
+        return;
+      }
+      const { customer, thread } = await getSupportThread(session.user.id);
+      await expireSupportCall(thread);
+      jsonResponse(response, 200, { thread: supportThreadView(thread, customer) });
+      return;
+    }
+
+    if (route === "POST /api/support/messages" || route === "POST /api/admin/support/messages") {
+      const session = getSession(request);
+      const isAdminReply = route === "POST /api/admin/support/messages";
+      if (!session || session.user.role !== (isAdminReply ? "admin" : "customer")) {
+        jsonResponse(response, 403, { error: isAdminReply
+          ? "Sign in as the store admin to reply to customers."
+          : "Sign in to message customer care." });
+        return;
+      }
+      const body = await readRequestBody(request);
+      const text = typeof body.text === "string" ? body.text.trim() : "";
+      if (!text || text.length > 2000) {
+        throw Object.assign(new Error("Enter a message between 1 and 2000 characters."), { status: 400 });
+      }
+      const customerId = isAdminReply
+        ? (typeof body.customerId === "string" ? body.customerId : "")
+        : session.user.id;
+      const { customer } = await getSupportThread(customerId, true);
+      const message = {
+        id: crypto.randomUUID(),
+        senderId: session.user.id,
+        senderRole: isAdminReply ? "admin" : "customer",
+        senderName: isAdminReply ? "Customer care" : customer.name,
+        text,
+        createdAt: new Date().toISOString()
+      };
+      await mutateStore("support.json", [], records => {
+        const thread = records.find(item => item.customerId === customerId);
+        if (!thread) throw Object.assign(new Error("Support conversation not found."), { status: 404 });
+        thread.messages.push(message);
+        thread.updatedAt = message.createdAt;
+      });
+      jsonResponse(response, 201, { message });
+      return;
+    }
+
+    if (route === "GET /api/admin/support") {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to view customer conversations." });
+        return;
+      }
+      const [users, threads] = await Promise.all([
+        readStore("users.json", []),
+        readStore("support.json", [])
+      ]);
+      const usersById = new Map(users.map(user => [user.id, user]));
+      const summaries = threads.map(thread => {
+        const customer = usersById.get(thread.customerId);
+        if (!customer) return null;
+        const lastMessage = thread.messages[thread.messages.length - 1] || null;
+        return {
+          customerId: thread.customerId,
+          customerName: customer.name,
+          customerEmail: customer.email,
+          customerPhone: customer.phone || "",
+          lastMessage: lastMessage ? lastMessage.text : "",
+          lastMessageAt: lastMessage ? lastMessage.createdAt : thread.updatedAt,
+          lastMessageRole: lastMessage ? lastMessage.senderRole : "",
+          callStatus: thread.call && !isSupportCallExpired(thread.call) && thread.call.status !== "ended"
+            ? thread.call.status
+            : "",
+          updatedAt: thread.updatedAt || null
+        };
+      }).filter(Boolean).sort((left, right) =>
+        Date.parse(right.updatedAt || 0) - Date.parse(left.updatedAt || 0)
+      );
+      jsonResponse(response, 200, summaries);
+      return;
+    }
+
+    const adminSupportThreadMatch = url.pathname.match(/^\/api\/admin\/support\/([^/]+)$/);
+    if (request.method === "GET" && adminSupportThreadMatch) {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to view customer conversations." });
+        return;
+      }
+      let customerId;
+      try {
+        customerId = decodeURIComponent(adminSupportThreadMatch[1]);
+      } catch {
+        jsonResponse(response, 400, { error: "The customer ID is invalid." });
+        return;
+      }
+      const { customer, thread } = await getSupportThread(customerId);
+      await expireSupportCall(thread);
+      jsonResponse(response, 200, { thread: supportThreadView(thread, customer) });
+      return;
+    }
+
+    if (route === "POST /api/support/calls") {
+      const session = getSession(request);
+      if (!session || !["admin", "customer"].includes(session.user.role)) {
+        jsonResponse(response, 403, { error: "Sign in to make or answer a customer-care call." });
+        return;
+      }
+      const body = await readRequestBody(request);
+      const action = typeof body.action === "string" ? body.action : "";
+      if (action === "start" && session.user.role !== "customer") {
+        throw Object.assign(new Error("Only a customer can start a support call."), { status: 403 });
+      }
+      if (action === "start") {
+        const { thread } = await getSupportThread(session.user.id, true);
+        await expireSupportCall(thread);
+        if (thread.call && ["ringing", "active"].includes(thread.call.status)) {
+          throw Object.assign(new Error("A support call is already in progress."), { status: 409 });
+        }
+        const call = {
+          id: crypto.randomUUID(),
+          status: "ringing",
+          startedAt: new Date().toISOString(),
+          lastActivityAt: new Date().toISOString(),
+          signals: []
+        };
+        await mutateStore("support.json", [], records => {
+          const current = records.find(item => item.customerId === session.user.id);
+          if (!current) throw Object.assign(new Error("Support conversation not found."), { status: 404 });
+          if (current.call && ["ringing", "active"].includes(current.call.status)) {
+            throw Object.assign(new Error("A support call is already in progress."), { status: 409 });
+          }
+          current.call = call;
+          current.updatedAt = call.startedAt;
+        });
+        jsonResponse(response, 201, { call });
+        return;
+      }
+      if (action === "heartbeat") {
+        const customerId = session.user.role === "admin"
+          ? (typeof body.customerId === "string" ? body.customerId : "")
+          : session.user.id;
+        const { thread } = await getSupportThread(customerId);
+        await expireSupportCall(thread);
+        const callId = typeof body.callId === "string" ? body.callId : "";
+        if (!thread.call || thread.call.id !== callId || thread.call.status !== "active") {
+          throw Object.assign(new Error("This support call is no longer active."), { status: 409 });
+        }
+        const lastActivityAt = new Date().toISOString();
+        const call = await mutateStore("support.json", [], records => {
+          const current = records.find(item => item.customerId === customerId);
+          if (!current || !current.call || current.call.id !== callId || current.call.status !== "active") {
+            throw Object.assign(new Error("This support call is no longer active."), { status: 409 });
+          }
+          current.call.lastActivityAt = lastActivityAt;
+          return current.call;
+        });
+        jsonResponse(response, 200, { call });
+        return;
+      }
+      if (!["end", "reject"].includes(action)) {
+        throw Object.assign(new Error("Choose start, end, or reject for this support call."), { status: 400 });
+      }
+      const { thread } = await getSupportThread(session.user.id === "admin" ? body.customerId : session.user.id);
+      await expireSupportCall(thread);
+      const callId = typeof body.callId === "string" ? body.callId : "";
+      if (!thread.call || thread.call.id !== callId || !["ringing", "active"].includes(thread.call.status)) {
+        throw Object.assign(new Error("This support call is no longer active."), { status: 404 });
+      }
+      if (action === "reject" && session.user.role !== "admin") {
+        throw Object.assign(new Error("Only customer care can reject a support call."), { status: 403 });
+      }
+      const endedAt = new Date().toISOString();
+      await mutateStore("support.json", [], records => {
+        const current = records.find(item => item.customerId === thread.customerId);
+        if (!current || !current.call || current.call.id !== callId) {
+          throw Object.assign(new Error("This support call is no longer active."), { status: 404 });
+        }
+        current.call.status = "ended";
+        current.call.endedAt = endedAt;
+        current.call.signals = [];
+        current.updatedAt = endedAt;
+      });
+      jsonResponse(response, 200, { call: { ...thread.call, status: "ended", endedAt } });
+      return;
+    }
+
+    const supportSignalsMatch = url.pathname.match(/^\/api\/support\/calls\/([^/]+)\/signals$/);
+    if (supportSignalsMatch && ["GET", "POST"].includes(request.method)) {
+      const session = getSession(request);
+      if (!session || !["admin", "customer"].includes(session.user.role)) {
+        jsonResponse(response, 403, { error: "Sign in to use customer-care calls." });
+        return;
+      }
+      let callId;
+      try {
+        callId = decodeURIComponent(supportSignalsMatch[1]);
+      } catch {
+        jsonResponse(response, 400, { error: "The call ID is invalid." });
+        return;
+      }
+      const customerId = session.user.role === "customer"
+        ? session.user.id
+        : (typeof url.searchParams.get("customerId") === "string" ? url.searchParams.get("customerId") : "");
+      const { thread } = await getSupportThread(customerId);
+      await expireSupportCall(thread);
+      if (!thread.call || thread.call.id !== callId) {
+        jsonResponse(response, 404, { error: "Support call not found." });
+        return;
+      }
+      if (request.method === "GET") {
+        jsonResponse(response, 200, { call: thread.call });
+        return;
+      }
+      if (thread.call.status === "ended") {
+        throw Object.assign(new Error("This support call has ended."), { status: 409 });
+      }
+      const body = await readRequestBody(request);
+      const type = typeof body.type === "string" ? body.type : "";
+      let payload = body.payload;
+      if (!["offer", "answer", "candidate"].includes(type)) {
+        throw Object.assign(new Error("Choose a valid call signal."), { status: 400 });
+      }
+      if ((type === "offer" && session.user.role !== "customer") ||
+          (type === "answer" && session.user.role !== "admin")) {
+        throw Object.assign(new Error("This account cannot send that call signal."), { status: 403 });
+      }
+      if (type === "offer" || type === "answer") {
+        if (typeof payload !== "string" || payload.length === 0 || payload.length > 30000) {
+          throw Object.assign(new Error("The audio call description is invalid."), { status: 400 });
+        }
+      } else {
+        if (!payload || typeof payload !== "object" || typeof payload.candidate !== "string" ||
+            payload.candidate.length > 5000) {
+          throw Object.assign(new Error("The audio call network candidate is invalid."), { status: 400 });
+        }
+        payload = {
+          candidate: payload.candidate,
+          sdpMid: typeof payload.sdpMid === "string" ? payload.sdpMid.slice(0, 100) : null,
+          sdpMLineIndex: Number.isInteger(payload.sdpMLineIndex) ? payload.sdpMLineIndex : null,
+          usernameFragment: typeof payload.usernameFragment === "string" ? payload.usernameFragment.slice(0, 100) : null
+        };
+      }
+      const signal = {
+        id: crypto.randomUUID(),
+        senderRole: session.user.role,
+        type,
+        payload,
+        createdAt: new Date().toISOString()
+      };
+      await mutateStore("support.json", [], records => {
+        const current = records.find(item => item.customerId === customerId);
+        if (!current || !current.call || current.call.id !== callId || current.call.status === "ended") {
+          throw Object.assign(new Error("This support call has ended."), { status: 409 });
+        }
+        current.call.signals.push(signal);
+        if (type === "answer") current.call.status = "active";
+        current.call.lastActivityAt = signal.createdAt;
+        current.updatedAt = signal.createdAt;
+      });
+      jsonResponse(response, 201, { signal });
       return;
     }
 
@@ -1993,6 +2324,14 @@ function createServer(options = {}) {
   }
 
   async function staticFile(request, response, url) {
+    if (url.pathname === "/customer-care") {
+      response.writeHead(308, {
+        Location: `/customercare${url.search}`,
+        "Cache-Control": "no-store"
+      }).end();
+      return;
+    }
+
     if (url.pathname === "/admin.html") {
       response.writeHead(308, {
         Location: `/admin${url.search}`,
@@ -2006,6 +2345,7 @@ function createServer(options = {}) {
       const pathname = url.pathname === "/" ? "/index.html"
         : url.pathname === "/admin" ? "/admin.html"
         : url.pathname === "/app" ? "/app.html"
+        : url.pathname === "/customercare" ? "/customer-care.app.html"
         : url.pathname === "/rider" || url.pathname === "/rider.html" ? "/rider.app.html"
         : url.pathname;
       requestedPath = decodeURIComponent(pathname);
