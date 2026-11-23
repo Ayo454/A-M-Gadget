@@ -22,10 +22,10 @@
     <p>Loading customer care...</p>
   </div>
   <header class="app-topbar">
-    <a class="app-brand" href="/admin" aria-label="Return to admin dashboard">
+    <div class="app-brand">
       <img src="/app-icon.svg" alt="" width="38" height="38">
       <div><strong>A&amp;M Gadget</strong><small>Customer care</small></div>
-    </a>
+    </div>
     <p class="app-topbar-status" data-pwa-status role="status" aria-live="polite"></p>
     <button class="app-install-button" type="button" data-install-app hidden>Install app</button>
     <button class="care-sign-out" id="careSignOut" type="button" hidden>Sign out</button>
@@ -41,14 +41,12 @@
         <label>Admin password<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
         <button class="app-primary-button" type="submit">Sign in to customer care</button>
       </form>
-      <a href="/admin">← Return to the admin dashboard</a>
     </section>
     <section class="care-workspace" id="careWorkspace" hidden>
       <aside class="care-inbox">
         <div class="care-inbox-heading"><div><span class="app-kicker">CUSTOMER CARE</span><h1>Inbox</h1></div><button id="careRefresh" type="button" aria-label="Refresh conversations">↻</button></div>
         <p class="care-inbox-summary" id="careInboxSummary">Loading conversations...</p>
         <div class="care-thread-list" id="careThreadList" aria-label="Customer conversations"></div>
-        <a href="/admin" class="care-admin-link">← Admin dashboard</a>
       </aside>
       <section class="care-conversation" aria-label="Selected conversation">
         <div class="care-empty" id="careEmpty"><strong>Select a conversation</strong><p>Customer messages and call requests will appear in your inbox.</p></div>

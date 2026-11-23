@@ -6,8 +6,6 @@
 .care-login { width:min(470px,100%); margin:8vh auto; padding:clamp(22px,5vw,40px); border:1px solid var(--app-line); border-radius:14px; background:white; box-shadow:0 16px 45px rgba(27,31,20,.07); }
 .care-login h1 { margin:8px 0; font-size:clamp(22px,4vw,30px); letter-spacing:-.05em; }
 .care-login > p { margin:0 0 20px; color:var(--app-muted); font-size:11px; line-height:1.6; }
-.care-login > a, .care-admin-link { color:#626943; font-size:10px; font-weight:800; text-decoration:none; }
-.care-login > a { display:inline-block; margin-top:17px; }
 .care-workspace { min-height:min(790px,calc(100vh - 120px)); display:grid; grid-template-columns:310px minmax(0,1fr); overflow:hidden; border:1px solid var(--app-line); border-radius:14px; background:#fff; box-shadow:0 15px 44px rgba(27,31,20,.05); }
 .care-inbox { min-width:0; display:flex; flex-direction:column; padding:17px 12px 12px; border-right:1px solid var(--app-line); background:#fbfcf9; }
 .care-inbox-heading { display:flex; align-items:center; justify-content:space-between; gap:9px; padding:0 5px; }
@@ -22,7 +20,6 @@
 .care-thread-button time { flex:none; color:var(--app-muted); font-size:8px; }
 .care-thread-button p { margin:0; overflow:hidden; color:var(--app-muted); font-size:9px; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
 .care-thread-call { justify-self:start; padding:3px 6px; border-radius:12px; background:#fff1df; color:#8a541d; font-size:8px; font-weight:900; }
-.care-admin-link { margin:12px 5px 2px; }
 .care-conversation { min-width:0; min-height:500px; display:flex; flex-direction:column; }
 .care-empty { display:grid; align-content:center; justify-items:center; flex:1; padding:25px; text-align:center; }
 .care-empty strong { font-size:15px; }
