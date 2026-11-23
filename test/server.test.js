@@ -82,6 +82,7 @@ test("serves the store and keeps the data files private", async t => {
   assert.match(homeHtml, /site\.webmanifest/);
   assert.match(homeHtml, /data-install-app/);
   assert.match(homeHtml, /src="\/pwa\.js"/);
+  assert.doesNotMatch(homeHtml, /Shop app|Customer care|Rider portal|Chat or call customer care/);
   assert.match(homeHtml, /class="cart-drawer" inert/);
   assert.doesNotMatch(homeHtml, /class="cart-drawer" aria-hidden=/);
 
