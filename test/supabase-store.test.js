@@ -18,6 +18,7 @@ test("reads and upserts supported Supabase collections", async () => {
   await store.setCollection("riders", [{ id: "rider-1" }]);
   await store.setCollection("payout_requests", [{ id: "payout-1" }]);
   await store.setCollection("support", [{ customerId: "customer-1" }]);
+  await store.setCollection("campaigns", [{ id: "weekday-broadcast" }]);
 
   assert.match(requests[0].url, /\/rest\/v1\/app_store\?collection=eq\.orders/);
   assert.equal(requests[0].options.headers.authorization, "Bearer server-only-test-key");
@@ -26,6 +27,7 @@ test("reads and upserts supported Supabase collections", async () => {
   assert.equal(JSON.parse(requests[2].options.body)[0].collection, "riders");
   assert.equal(JSON.parse(requests[3].options.body)[0].collection, "payout_requests");
   assert.equal(JSON.parse(requests[4].options.body)[0].collection, "support");
+  assert.equal(JSON.parse(requests[5].options.body)[0].collection, "campaigns");
   await assert.rejects(() => store.getCollection("unknown"), /not supported/);
 });
 

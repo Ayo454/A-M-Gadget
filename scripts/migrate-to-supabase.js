@@ -5,7 +5,7 @@ const { SupabaseStore } = require("../supabase-store");
 
 const projectDirectory = path.join(__dirname, "..");
 const dataDirectory = path.join(projectDirectory, "data");
-const collections = ["products", "users", "orders", "sessions", "riders", "payout_requests", "support"];
+const collections = ["products", "users", "orders", "sessions", "riders", "payout_requests", "support", "campaigns"];
 
 async function readCollection(collection) {
   try {

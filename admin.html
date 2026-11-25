@@ -59,6 +59,7 @@
           <button type="button" class="active" data-admin-view="overview"><span>▦</span> Dashboard</button>
           <button type="button" data-admin-view="products"><span>▣</span> Products</button>
           <button type="button" data-admin-view="users"><span>♙</span> Users <small class="admin-nav-count" id="adminUserCount">0</small></button>
+          <button type="button" data-admin-view="broadcast"><span>✉</span> Messages</button>
           <button type="button" data-admin-view="orders"><span>▤</span> Orders <small class="admin-nav-count" id="adminOrderCount">0</small></button>
           <a href="/customercare"><span>✉</span> Customer care</a>
           <button type="button" data-admin-view="riders"><span>♧</span> Riders <small class="admin-nav-count" id="adminRiderCount">0</small></button>
@@ -126,6 +127,95 @@
                 <tbody id="adminUserRows"></tbody>
               </table>
             </div>
+          </section>
+        </section>
+
+        <section class="admin-view" id="adminBroadcastView" data-admin-panel="broadcast" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <p class="admin-kicker">CUSTOMER UPDATES</p>
+              <h1>Weekday messages</h1>
+              <p>Manage opted-in contacts and schedule separate email and SMS messages for each weekday.</p>
+            </div>
+          </div>
+          <p class="admin-broadcast-integrations" id="broadcastIntegrationStatus" role="status" aria-live="polite"></p>
+
+          <section class="admin-panel">
+            <div class="admin-panel-heading">
+              <div><h2>Add a contact</h2><p>Only add addresses and numbers that agreed to receive the selected updates.</p></div>
+            </div>
+            <form id="broadcastContactForm" class="site-form admin-broadcast-contact-form">
+              <label>Name (optional)<input name="name" type="text" maxlength="100" autocomplete="name"></label>
+              <label>Email address<input name="email" type="email" maxlength="254" autocomplete="email"></label>
+              <label>Phone number for SMS<input name="phone" type="tel" maxlength="25" placeholder="+2348012345678" autocomplete="tel"></label>
+              <label class="admin-check-field"><input name="emailConsent" type="checkbox"> I have permission to send email updates to this address.</label>
+              <label class="admin-check-field"><input name="smsConsent" type="checkbox"> I have permission to send SMS updates to this number.</label>
+              <div class="admin-form-actions admin-form-wide">
+                <button class="admin-primary-button" type="submit">Add opted-in contact</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="admin-panel">
+            <div class="admin-panel-heading">
+              <div><h2>Broadcast contacts</h2><p id="broadcastContactCount">Loading contacts...</p></div>
+            </div>
+            <div class="admin-table-scroll">
+              <table class="admin-record-table">
+                <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Opted-in channels</th><th>Action</th></tr></thead>
+                <tbody id="broadcastContactRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="admin-panel">
+            <div class="admin-panel-heading">
+              <div><h2>Schedule messages</h2><p>Send separate weekday messages at the selected time in Lagos time (WAT).</p></div>
+            </div>
+            <form id="broadcastScheduleForm" class="site-form admin-broadcast-schedule-form">
+              <div class="admin-broadcast-schedule-controls">
+                <label>Send time (WAT)<input name="time" type="time" required value="09:00"></label>
+                <label class="admin-check-field"><input name="enabled" type="checkbox"> Enable automatic Monday–Friday sending</label>
+              </div>
+              <p class="form-help">Each weekday must have an email or SMS message before the schedule can be enabled. Email recipients get an unsubscribe link; SMS recipients can contact customer care to opt out. Provider charges may apply.</p>
+              <div class="admin-broadcast-days">
+                <fieldset class="admin-broadcast-day" data-day="monday"><legend>Monday</legend>
+                  <label>Email subject<input data-field="emailSubject" type="text" maxlength="120"></label>
+                  <label>Email message<textarea data-field="emailMessage" rows="3" maxlength="5000"></textarea></label>
+                  <label>SMS message<textarea data-field="smsMessage" rows="2" maxlength="280"></textarea></label>
+                </fieldset>
+                <fieldset class="admin-broadcast-day" data-day="tuesday"><legend>Tuesday</legend>
+                  <label>Email subject<input data-field="emailSubject" type="text" maxlength="120"></label>
+                  <label>Email message<textarea data-field="emailMessage" rows="3" maxlength="5000"></textarea></label>
+                  <label>SMS message<textarea data-field="smsMessage" rows="2" maxlength="280"></textarea></label>
+                </fieldset>
+                <fieldset class="admin-broadcast-day" data-day="wednesday"><legend>Wednesday</legend>
+                  <label>Email subject<input data-field="emailSubject" type="text" maxlength="120"></label>
+                  <label>Email message<textarea data-field="emailMessage" rows="3" maxlength="5000"></textarea></label>
+                  <label>SMS message<textarea data-field="smsMessage" rows="2" maxlength="280"></textarea></label>
+                </fieldset>
+                <fieldset class="admin-broadcast-day" data-day="thursday"><legend>Thursday</legend>
+                  <label>Email subject<input data-field="emailSubject" type="text" maxlength="120"></label>
+                  <label>Email message<textarea data-field="emailMessage" rows="3" maxlength="5000"></textarea></label>
+                  <label>SMS message<textarea data-field="smsMessage" rows="2" maxlength="280"></textarea></label>
+                </fieldset>
+                <fieldset class="admin-broadcast-day" data-day="friday"><legend>Friday</legend>
+                  <label>Email subject<input data-field="emailSubject" type="text" maxlength="120"></label>
+                  <label>Email message<textarea data-field="emailMessage" rows="3" maxlength="5000"></textarea></label>
+                  <label>SMS message<textarea data-field="smsMessage" rows="2" maxlength="280"></textarea></label>
+                </fieldset>
+              </div>
+              <div class="admin-form-actions">
+                <button class="admin-primary-button" type="submit">Save weekday messages</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="admin-panel">
+            <div class="admin-panel-heading">
+              <div><h2>Recent sends</h2><p id="broadcastRunSummary">No scheduled messages have been sent yet.</p></div>
+            </div>
+            <div class="admin-broadcast-runs" id="broadcastRuns"></div>
           </section>
         </section>
 

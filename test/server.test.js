@@ -33,6 +33,10 @@ async function createTestApp(t, serverOptions = {}) {
     if (server.listening) await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 
+  async function runDueBroadcast() {
+    return server.runDueBroadcast();
+  }
+
   t.after(async () => {
     await close();
     await fs.rm(dataDirectory, { recursive: true, force: true });
@@ -42,6 +46,7 @@ async function createTestApp(t, serverOptions = {}) {
     dataDirectory,
     listen,
     close,
+    runDueBroadcast,
     restart() {
       server = createServer({
         dataDirectory,
@@ -142,6 +147,8 @@ test("serves the store and keeps the data files private", async t => {
   assert.match(adminPageHtml, /mobile-web-app-capable/);
   assert.match(adminPageHtml, /data-install-app/);
   assert.match(adminPageHtml, /src="pwa\.js"/);
+  assert.match(adminPageHtml, /Weekday messages/);
+  assert.match(adminPageHtml, /data-admin-view="broadcast"/);
   const oldAdminPage = await fetch(`${baseUrl}/admin.html`, { redirect: "manual" });
   assert.equal(oldAdminPage.status, 308);
   assert.equal(oldAdminPage.headers.get("location"), "/admin");
@@ -810,6 +817,120 @@ test("stores customer data, sessions, and avatars in Supabase when configured", 
   baseUrl = await app.listen();
   const persistedSession = await jsonRequest(`${baseUrl}/api/auth/session`, "GET", undefined, cookie);
   assert.equal((await persistedSession.json()).user.email, "supabase@example.com");
+});
+
+test("admin manages opted-in weekday broadcasts and the scheduler sends once with opt-out controls", async t => {
+  const sentEmails = [];
+  const sentSms = [];
+  let now = new Date("2026-11-25T07:59:00.000Z");
+  const app = await createTestApp(t, {
+    broadcastNow: () => now,
+    brevoSmsSender: "AMGadget",
+    brevoOAuthClientId: "test-client-id",
+    brevoOAuthClientSecret: "test-client-secret",
+    brevoFetch: async (url, options) => {
+      if (url === "https://api.brevo.com/realms/partner/oauth/token") {
+        return new Response(JSON.stringify({ access_token: "test-campaign-sms-token", expires_in: 3600 }), { status: 200 });
+      }
+      if (url === "https://api.brevo.com/v3/smtp/email") {
+        sentEmails.push(JSON.parse(options.body));
+        return new Response("{}", { status: 201 });
+      }
+      if (url === "https://api.brevo.com/v3/transactionalSMS/send") {
+        sentSms.push(JSON.parse(options.body));
+        return new Response("{}", { status: 201 });
+      }
+      throw new Error(`Unexpected Brevo request: ${url}`);
+    }
+  });
+  const baseUrl = await app.listen();
+
+  const unauthorized = await jsonRequest(`${baseUrl}/api/admin/broadcast`);
+  assert.equal(unauthorized.status, 403);
+  const login = await jsonRequest(`${baseUrl}/api/admin/login`, "POST", {
+    email: "owner@example.com",
+    password: "test-admin-password"
+  });
+  const adminCookie = sessionCookie(login);
+  const initial = await jsonRequest(`${baseUrl}/api/admin/broadcast`, "GET", undefined, adminCookie);
+  assert.equal(initial.status, 200);
+  const initialData = await initial.json();
+  assert.equal(initialData.integrations.emailConfigured, true);
+  assert.equal(initialData.integrations.smsConfigured, true);
+
+  const missingConsent = await jsonRequest(`${baseUrl}/api/admin/broadcast/contacts`, "POST", {
+    email: "customer@example.com"
+  }, adminCookie);
+  assert.equal(missingConsent.status, 400);
+  const addedContact = await jsonRequest(`${baseUrl}/api/admin/broadcast/contacts`, "POST", {
+    name: "Test Customer",
+    email: "customer@example.com",
+    phone: "08012345678",
+    emailConsent: true,
+    smsConsent: true
+  }, adminCookie);
+  assert.equal(addedContact.status, 201);
+  assert.equal((await addedContact.json()).phone, "+2348012345678");
+
+  const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+  const messages = Object.fromEntries(weekdays.map(day => [day, {
+    emailSubject: `${day} store update`,
+    emailMessage: `Good morning. Here is your ${day} update.`,
+    smsMessage: `Good morning! ${day} A&M Gadget update.`
+  }]));
+  const incompleteMessages = { ...messages, friday: { emailSubject: "", emailMessage: "", smsMessage: "" } };
+  const incompleteSchedule = await jsonRequest(`${baseUrl}/api/admin/broadcast/schedule`, "PUT", {
+    enabled: true,
+    time: "09:00",
+    messages: incompleteMessages
+  }, adminCookie);
+  assert.equal(incompleteSchedule.status, 400);
+
+  const savedSchedule = await jsonRequest(`${baseUrl}/api/admin/broadcast/schedule`, "PUT", {
+    enabled: true,
+    time: "09:00",
+    messages
+  }, adminCookie);
+  assert.equal(savedSchedule.status, 200);
+  const beforeScheduledTime = await app.runDueBroadcast();
+  assert.equal(beforeScheduledTime, null);
+
+  now = new Date("2026-11-25T08:00:00.000Z");
+  const sentRun = await app.runDueBroadcast();
+  assert.equal(sentRun.status, "sent");
+  assert.equal(sentRun.weekday, "wednesday");
+  assert.equal(sentRun.emailSent, 1);
+  assert.equal(sentRun.smsSent, 1);
+  assert.equal(sentEmails.length, 1);
+  assert.equal(sentEmails[0].subject, "wednesday store update");
+  assert.match(sentEmails[0].htmlContent, /Unsubscribe from email updates/);
+  assert.equal(sentSms[0].recipient, "2348012345678");
+  assert.match(sentSms[0].content, /To stop SMS, contact A&M Gadget customer care/);
+  assert.equal(await app.runDueBroadcast(), null);
+  assert.equal(sentEmails.length, 1);
+  assert.equal(sentSms.length, 1);
+
+  const unsubscribeLink = sentEmails[0].htmlContent.match(/href="([^"]+)"[^>]*>Unsubscribe from email updates/);
+  assert.ok(unsubscribeLink);
+  const unsubscribeUrl = new URL(unsubscribeLink[1].replace(/&amp;/g, "&"));
+  const unsubscribePage = await fetch(`${baseUrl}${unsubscribeUrl.pathname}${unsubscribeUrl.search}`);
+  assert.equal(unsubscribePage.status, 200);
+  assert.match(await unsubscribePage.text(), /Confirm that you want to stop/);
+  const unsubscribeResponse = await fetch(`${baseUrl}/api/broadcast/unsubscribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      email: unsubscribeUrl.searchParams.get("email"),
+      token: unsubscribeUrl.searchParams.get("token")
+    }).toString()
+  });
+  assert.equal(unsubscribeResponse.status, 200);
+  assert.match(await unsubscribeResponse.text(), /You will no longer receive/);
+
+  const updated = await jsonRequest(`${baseUrl}/api/admin/broadcast`, "GET", undefined, adminCookie);
+  const updatedContact = (await updated.json()).contacts[0];
+  assert.equal(updatedContact.emailConsent, false);
+  assert.equal(updatedContact.smsConsent, true);
 });
 
 test("sends Brevo welcome, order, and admin status emails", async t => {

@@ -1,4 +1,4 @@
-const CACHE_NAME = "am-gadget-app-shell-v7";
+const CACHE_NAME = "am-gadget-app-shell-v8";
 const APP_SHELL = [
   "/",
   "/app.html",

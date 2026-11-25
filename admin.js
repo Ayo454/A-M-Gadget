@@ -16,6 +16,10 @@ const riderRows = document.querySelector("#adminRiderRows");
 const payoutRows = document.querySelector("#adminPayoutRows");
 const userSearch = document.querySelector("#userSearch");
 const orderSearch = document.querySelector("#orderSearch");
+const broadcastContactForm = document.querySelector("#broadcastContactForm");
+const broadcastScheduleForm = document.querySelector("#broadcastScheduleForm");
+const broadcastContactRows = document.querySelector("#broadcastContactRows");
+const broadcastRuns = document.querySelector("#broadcastRuns");
 const orderDetailBackdrop = document.querySelector("#adminOrderDetailBackdrop");
 const orderDetailContent = document.querySelector("#adminOrderDetailContent");
 const orderDetailActions = document.querySelector("#adminOrderDetailActions");
@@ -26,6 +30,7 @@ let users = [];
 let orders = [];
 let riders = [];
 let payoutRequests = [];
+let broadcastData = null;
 let selectedProductId = null;
 let selectedOrderId = null;
 let editingProductId = null;
@@ -51,6 +56,9 @@ async function adminRequest(path, options = {}) {
       orderRows.replaceChildren();
       riderRows.replaceChildren();
       payoutRows.replaceChildren();
+      broadcastContactRows.replaceChildren();
+      broadcastRuns.replaceChildren();
+      broadcastData = null;
       productManager.hidden = true;
       adminUserBar.hidden = true;
       adminLoginPanel.hidden = false;
@@ -86,7 +94,7 @@ function setAdminView(view) {
     button.classList.toggle("active", active);
     button.setAttribute("aria-current", active ? "page" : "false");
   });
-  const titles = { overview: "Dashboard", products: "Products", users: "Users", orders: "Orders", riders: "Riders", payouts: "Payouts" };
+  const titles = { overview: "Dashboard", products: "Products", users: "Users", broadcast: "Messages", orders: "Orders", riders: "Riders", payouts: "Payouts" };
   document.querySelector("#adminPageTitle").textContent = titles[view] || "Dashboard";
 }
 
@@ -283,6 +291,76 @@ function renderUsers() {
   });
   document.querySelector("#userCountLabel").textContent =
     `${filtered.length} user${filtered.length === 1 ? "" : "s"}${search ? " found" : ""}`;
+}
+
+const broadcastWeekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+
+function renderBroadcast() {
+  if (!broadcastData) return;
+  const { contacts, schedule, integrations, runs } = broadcastData;
+  document.querySelector("#broadcastIntegrationStatus").textContent =
+    `Brevo email: ${integrations.emailConfigured ? "ready" : "not configured"} · Brevo SMS: ${integrations.smsConfigured ? "ready" : "not configured"}`;
+  document.querySelector("#broadcastContactCount").textContent =
+    `${contacts.length} contact${contacts.length === 1 ? "" : "s"} · ${contacts.filter(contact => contact.emailConsent).length} email · ${contacts.filter(contact => contact.smsConsent).length} SMS`;
+
+  broadcastScheduleForm.elements.time.value = schedule.time || "09:00";
+  broadcastScheduleForm.elements.enabled.checked = Boolean(schedule.enabled);
+  broadcastWeekdays.forEach(day => {
+    const plan = schedule.messages[day] || {};
+    const dayPanel = broadcastScheduleForm.querySelector(`[data-day="${day}"]`);
+    dayPanel.querySelector('[data-field="emailSubject"]').value = plan.emailSubject || "";
+    dayPanel.querySelector('[data-field="emailMessage"]').value = plan.emailMessage || "";
+    dayPanel.querySelector('[data-field="smsMessage"]').value = plan.smsMessage || "";
+  });
+
+  broadcastContactRows.replaceChildren();
+  if (!contacts.length) {
+    createEmptyRow(broadcastContactRows, 5, "No broadcast contacts yet. Add an opted-in contact above.");
+  }
+  contacts.forEach(contact => {
+    const row = document.createElement("tr");
+    const nameCell = createTableCell(contact.name || "—");
+    const emailCell = createTableCell(contact.email || "—");
+    const phoneCell = createTableCell(contact.phone || "—");
+    const channelCell = document.createElement("td");
+    const channels = [];
+    if (contact.emailConsent) channels.push("Email");
+    else if (contact.email) channels.push("Email opted out");
+    if (contact.smsConsent) channels.push("SMS");
+    else if (contact.phone) channels.push("SMS not opted in");
+    channelCell.textContent = channels.join(" · ") || "—";
+    const actionCell = document.createElement("td");
+    const removeButton = makeAdminActionButton("remove-broadcast-contact", contact.id, "Remove");
+    actionCell.append(removeButton);
+    row.append(nameCell, emailCell, phoneCell, channelCell, actionCell);
+    broadcastContactRows.append(row);
+  });
+
+  broadcastRuns.replaceChildren();
+  document.querySelector("#broadcastRunSummary").textContent = runs.length
+    ? `${runs.length} recent scheduled run${runs.length === 1 ? "" : "s"}`
+    : "No scheduled messages have been sent yet.";
+  if (!runs.length) {
+    const empty = document.createElement("p");
+    empty.className = "admin-broadcast-empty";
+    empty.textContent = "The scheduler will report each weekday attempt here.";
+    broadcastRuns.append(empty);
+  }
+  runs.forEach(run => {
+    const item = document.createElement("div");
+    const heading = document.createElement("strong");
+    const result = document.createElement("small");
+    item.className = "admin-broadcast-run";
+    heading.textContent = `${run.weekday} · ${run.date} · ${run.status.replace(/_/g, " ")}`;
+    result.textContent = `Email ${run.emailSent} sent / ${run.emailFailed} failed · SMS ${run.smsSent} sent / ${run.smsFailed} failed`;
+    item.append(heading, result);
+    broadcastRuns.append(item);
+  });
+}
+
+async function loadBroadcast() {
+  broadcastData = await adminRequest("/api/admin/broadcast");
+  renderBroadcast();
 }
 
 function makeAdminActionButton(action, id, label, style = "") {
@@ -868,8 +946,85 @@ document.querySelector("#adminLogout").addEventListener("click", async () => {
 });
 
 document.querySelectorAll("[data-admin-view]").forEach(button => {
-  button.addEventListener("click", () => setAdminView(button.dataset.adminView));
+  button.addEventListener("click", () => {
+    const view = button.dataset.adminView;
+    setAdminView(view);
+    if (view === "broadcast") loadBroadcast().catch(error => showAdminStatus(error.message, true));
+  });
 });
+if (broadcastContactForm) {
+  broadcastContactForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const form = new FormData(broadcastContactForm);
+    const contact = {
+      name: form.get("name"),
+      email: form.get("email"),
+      phone: form.get("phone"),
+      emailConsent: form.has("emailConsent"),
+      smsConsent: form.has("smsConsent")
+    };
+    try {
+      await adminRequest("/api/admin/broadcast/contacts", {
+        method: "POST",
+        body: JSON.stringify(contact)
+      });
+      broadcastContactForm.reset();
+      await loadBroadcast();
+      showAdminStatus("The opted-in contact was added.");
+    } catch (error) {
+      showAdminStatus(error.message, true);
+    }
+  });
+}
+if (broadcastContactRows) {
+  broadcastContactRows.addEventListener("click", async event => {
+    const button = event.target.closest('[data-admin-action="remove-broadcast-contact"]');
+    if (!button) return;
+    const contact = broadcastData && broadcastData.contacts.find(item => item.id === button.dataset.recordId);
+    const label = contact && (contact.email || contact.phone || contact.name);
+    if (!window.confirm(`Remove ${label || "this contact"} from weekday messages?`)) return;
+    button.disabled = true;
+    try {
+      await adminRequest(`/api/admin/broadcast/contacts/${encodeURIComponent(button.dataset.recordId)}`, {
+        method: "DELETE"
+      });
+      await loadBroadcast();
+      showAdminStatus("The contact was removed from weekday messages.");
+    } catch (error) {
+      showAdminStatus(error.message, true);
+      button.disabled = false;
+    }
+  });
+}
+if (broadcastScheduleForm) {
+  broadcastScheduleForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const messages = Object.fromEntries(broadcastWeekdays.map(day => {
+      const dayPanel = broadcastScheduleForm.querySelector(`[data-day="${day}"]`);
+      return [day, {
+        emailSubject: dayPanel.querySelector('[data-field="emailSubject"]').value,
+        emailMessage: dayPanel.querySelector('[data-field="emailMessage"]').value,
+        smsMessage: dayPanel.querySelector('[data-field="smsMessage"]').value
+      }];
+    }));
+    try {
+      await adminRequest("/api/admin/broadcast/schedule", {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: broadcastScheduleForm.elements.enabled.checked,
+          time: broadcastScheduleForm.elements.time.value,
+          messages
+        })
+      });
+      await loadBroadcast();
+      showAdminStatus(broadcastScheduleForm.elements.enabled.checked
+        ? "Weekday messages are saved and scheduled."
+        : "Weekday messages are saved; automatic sending is off.");
+    } catch (error) {
+      showAdminStatus(error.message, true);
+    }
+  });
+}
 riderRows.addEventListener("click", event => {
   const button = event.target.closest("[data-admin-action]");
   if (button) updateAdminRecord(button);

@@ -81,6 +81,45 @@ function normalizeSmsPhone(value) {
   throw Object.assign(new Error("The delivery phone number must include its international country code."), { status: 400 });
 }
 
+const broadcastWeekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+
+function createDefaultBroadcast() {
+  return {
+    id: "weekday-broadcast",
+    contacts: [],
+    schedule: {
+      enabled: false,
+      enabledAt: null,
+      time: "09:00",
+      timeZone: "Africa/Lagos",
+      messages: Object.fromEntries(broadcastWeekdays.map(day => [day, {
+        emailSubject: "",
+        emailMessage: "",
+        smsMessage: ""
+      }]))
+    },
+    runs: []
+  };
+}
+
+function lagosDateParts(date) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos",
+    weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date).map(part => [part.type, part.value]));
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    weekday: parts.weekday.toLowerCase(),
+    time: `${parts.hour}:${parts.minute}`
+  };
+}
+
 function readCookies(request) {
   return Object.fromEntries((request.headers.cookie || "")
     .split(";")
@@ -271,6 +310,12 @@ function createServer(options = {}) {
   const brevoOAuthClientId = String(options.brevoOAuthClientId ?? process.env.BREVO_OAUTH_CLIENT_ID ?? "").trim();
   const brevoOAuthClientSecret = String(options.brevoOAuthClientSecret ?? process.env.BREVO_OAUTH_CLIENT_SECRET ?? "").trim();
   const deliveryOtpSecret = String(options.deliveryOtpSecret ?? process.env.DELIVERY_OTP_SECRET ?? "").trim();
+  const publicSiteUrl = new URL(String(options.publicSiteUrl ?? process.env.PUBLIC_SITE_URL ?? "https://amgadget.name.ng")).origin;
+  const broadcastNow = options.broadcastNow || (() => new Date());
+  const broadcastSchedulerIntervalMs = options.broadcastSchedulerIntervalMs ?? 60000;
+  if (typeof broadcastNow !== "function" || !Number.isFinite(broadcastSchedulerIntervalMs) || broadcastSchedulerIntervalMs < 1000) {
+    throw new Error("Broadcast scheduler options are invalid.");
+  }
   const brevoFetch = options.brevoFetch || globalThis.fetch;
   let brevoSmsToken = "";
   let brevoSmsTokenExpiresAt = 0;
@@ -302,6 +347,7 @@ function createServer(options = {}) {
   const sessions = new Map();
   let writeQueue = Promise.resolve();
   let sessionsLoadPromise;
+  let broadcastSchedulerBusy = false;
 
   function getPaymentDetails() {
     if (!paymentBankName || !paymentAccountName || !paymentAccountNumber) {
@@ -369,14 +415,19 @@ function createServer(options = {}) {
     return "";
   }
 
-  async function sendBrevoEmail({ recipientEmail, recipientName, subject, title, paragraphs, items = [] }) {
+  async function sendBrevoEmail({ recipientEmail, recipientName, subject, title, paragraphs, items = [], unsubscribeUrl = "" }) {
     if (!brevoApiKey || !brevoSenderEmail) {
       throw new Error("Configure BREVO_API_KEY and BREVO_SENDER_EMAIL to send transactional emails.");
     }
     const safeTitle = escapeHtml(title);
     const safeName = escapeHtml(recipientName);
     const safeParagraphs = paragraphs.map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("");
-    const textContent = [`Hello ${recipientName},`, "", ...paragraphs].join("\n");
+    const textContent = [
+      `Hello ${recipientName},`,
+      "",
+      ...paragraphs,
+      ...(unsubscribeUrl ? ["", `Unsubscribe from email updates: ${unsubscribeUrl}`] : [])
+    ].join("\n");
     const itemCards = (await Promise.all(items.map(async item => {
       const name = escapeHtml(item.name || "Gadget");
       const quantity = Number(item.quantity) || 1;
@@ -433,6 +484,7 @@ function createServer(options = {}) {
                     <td style="padding:20px 32px;background:#f4f6fb;text-align:center;color:#70788a;font-size:13px;line-height:1.6;">
                       A&amp;M Gadget<br>
                       Thank you for shopping with us.
+                      ${unsubscribeUrl ? `<br><a href="${escapeHtml(unsubscribeUrl)}" style="color:#53647d;">Unsubscribe from email updates</a>` : ""}
                     </td>
                   </tr>
                 </table>
@@ -535,6 +587,168 @@ function createServer(options = {}) {
       }));
     });
     await Promise.all(notifications);
+  }
+
+  function isBroadcastEmailConfigured() {
+    return Boolean(brevoApiKey && brevoSenderEmail);
+  }
+
+  function isBroadcastSmsConfigured() {
+    return Boolean(
+      brevoSmsSender &&
+      (/^\d{1,15}$/.test(brevoSmsSender) || /^[A-Za-z0-9]{1,11}$/.test(brevoSmsSender)) &&
+      brevoOAuthClientId &&
+      brevoOAuthClientSecret
+    );
+  }
+
+  function broadcastUnsubscribeUrl(email) {
+    const token = crypto.createHmac("sha256", brevoApiKey)
+      .update(email.trim().toLowerCase())
+      .digest("hex");
+    const unsubscribe = new URL("/api/broadcast/unsubscribe", publicSiteUrl);
+    unsubscribe.searchParams.set("email", email.trim().toLowerCase());
+    unsubscribe.searchParams.set("token", token);
+    return unsubscribe.href;
+  }
+
+  function findBroadcast(records) {
+    return records.find(record => record && record.id === "weekday-broadcast") || null;
+  }
+
+  async function getBroadcastView() {
+    const records = await readStore("campaigns.json", []);
+    const broadcast = findBroadcast(records) || createDefaultBroadcast();
+    return {
+      contacts: broadcast.contacts.map(contact => ({
+        id: contact.id,
+        name: contact.name,
+        email: contact.email,
+        phone: contact.phone,
+        emailConsent: Boolean(contact.emailConsentAt),
+        smsConsent: Boolean(contact.smsConsentAt),
+        createdAt: contact.createdAt
+      })),
+      schedule: broadcast.schedule,
+      runs: broadcast.runs.slice(0, 10),
+      integrations: {
+        emailConfigured: isBroadcastEmailConfigured(),
+        smsConfigured: isBroadcastSmsConfigured()
+      }
+    };
+  }
+
+  async function runDueBroadcast() {
+    if (broadcastSchedulerBusy) return null;
+    const now = new Date(broadcastNow());
+    if (!Number.isFinite(now.getTime())) throw new Error("The broadcast scheduler clock returned an invalid date.");
+    const localNow = lagosDateParts(now);
+    if (!broadcastWeekdays.includes(localNow.weekday)) return null;
+
+    broadcastSchedulerBusy = true;
+    try {
+      const prepared = await mutateStore("campaigns.json", [], records => {
+        const broadcast = findBroadcast(records);
+        if (!broadcast || !broadcast.schedule.enabled || localNow.time < broadcast.schedule.time) return null;
+        if (broadcast.runs.some(run => run.date === localNow.date)) return null;
+        if (broadcast.schedule.enabledAt) {
+          const enabledAt = lagosDateParts(new Date(broadcast.schedule.enabledAt));
+          if (enabledAt.date === localNow.date && enabledAt.time > broadcast.schedule.time) return null;
+        }
+        const message = broadcast.schedule.messages[localNow.weekday];
+        const run = {
+          id: crypto.randomUUID(),
+          date: localNow.date,
+          weekday: localNow.weekday,
+          status: "sending",
+          startedAt: now.toISOString(),
+          recipients: 0,
+          emailSent: 0,
+          emailFailed: 0,
+          smsSent: 0,
+          smsFailed: 0
+        };
+        broadcast.runs.unshift(run);
+        broadcast.runs = broadcast.runs.slice(0, 30);
+        return {
+          broadcast: JSON.parse(JSON.stringify(broadcast)),
+          runId: run.id,
+          message
+        };
+      });
+      if (!prepared) return null;
+
+      const recipients = prepared.broadcast.contacts.filter(contact =>
+        (prepared.message.emailMessage && contact.email && contact.emailConsentAt) ||
+        (prepared.message.smsMessage && contact.phone && contact.smsConsentAt)
+      );
+      let emailSent = 0;
+      let emailFailed = 0;
+      let smsSent = 0;
+      let smsFailed = 0;
+      const failures = [];
+      let cursor = 0;
+      const workerCount = Math.min(5, recipients.length);
+      await Promise.all(Array.from({ length: workerCount }, async () => {
+        while (cursor < recipients.length) {
+          const contact = recipients[cursor++];
+          if (prepared.message.emailMessage && contact.email && contact.emailConsentAt) {
+            try {
+              await sendBrevoEmail({
+                recipientEmail: contact.email,
+                recipientName: contact.name || "Customer",
+                subject: prepared.message.emailSubject,
+                title: prepared.message.emailSubject,
+                paragraphs: [prepared.message.emailMessage],
+                unsubscribeUrl: broadcastUnsubscribeUrl(contact.email)
+              });
+              emailSent += 1;
+            } catch (error) {
+              emailFailed += 1;
+              if (failures.length < 3) failures.push(error.message);
+            }
+          }
+          if (prepared.message.smsMessage && contact.phone && contact.smsConsentAt) {
+            try {
+              await sendBrevoSms({
+                recipientPhone: contact.phone,
+                content: `${prepared.message.smsMessage} To stop SMS, contact A&M Gadget customer care.`
+              });
+              smsSent += 1;
+            } catch (error) {
+              smsFailed += 1;
+              if (failures.length < 3) failures.push(error.message);
+            }
+          }
+        }
+      }));
+
+      const attempted = emailSent + emailFailed + smsSent + smsFailed;
+      const status = attempted === 0 ? "no_recipients"
+        : emailFailed + smsFailed === 0 ? "sent"
+        : emailSent + smsSent === 0 ? "failed"
+        : "partial";
+      const completedAt = new Date(broadcastNow()).toISOString();
+      const result = await mutateStore("campaigns.json", [], records => {
+        const broadcast = findBroadcast(records);
+        const run = broadcast && broadcast.runs.find(item => item.id === prepared.runId);
+        if (!run) throw new Error("The weekday broadcast run could not be found while saving its results.");
+        Object.assign(run, {
+          status,
+          completedAt,
+          recipients: recipients.length,
+          emailSent,
+          emailFailed,
+          smsSent,
+          smsFailed,
+          error: failures.join(" ").slice(0, 500)
+        });
+        return { ...run };
+      });
+      return result;
+    } finally {
+      broadcastSchedulerBusy = false;
+    }
   }
 
   async function notifyStoreOfOrder(order) {
@@ -1081,6 +1295,54 @@ function createServer(options = {}) {
   async function api(request, response, url) {
     const route = `${request.method} ${url.pathname}`;
 
+    if (route === "GET /api/broadcast/unsubscribe") {
+      const email = String(url.searchParams.get("email") || "").trim().toLowerCase();
+      const token = String(url.searchParams.get("token") || "");
+      const expectedToken = brevoApiKey && email
+        ? crypto.createHmac("sha256", brevoApiKey).update(email).digest("hex")
+        : "";
+      if (!expectedToken || !/^[a-f0-9]{64}$/i.test(token) || !safeEqual(token, expectedToken)) {
+        jsonResponse(response, 400, { error: "This unsubscribe link is invalid." });
+        return;
+      }
+      const page = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Email preferences | A&amp;M Gadget</title><body style="font-family:Arial,sans-serif;max-width:520px;margin:12vh auto;padding:24px;color:#172033"><h1>Email preferences</h1><p>Confirm that you want to stop weekday email updates from A&amp;M Gadget.</p><form method="post" action="/api/broadcast/unsubscribe"><input type="hidden" name="email" value="${escapeHtml(email)}"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit" style="padding:12px 18px">Unsubscribe from email updates</button></form></body></html>`;
+      response.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Content-Security-Policy": "default-src 'none'; form-action 'self'; style-src 'unsafe-inline'"
+      });
+      response.end(page);
+      return;
+    }
+
+    if (route === "POST /api/broadcast/unsubscribe") {
+      const body = await readRequestBody(request);
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const token = typeof body.token === "string" ? body.token : "";
+      const expectedToken = brevoApiKey && email
+        ? crypto.createHmac("sha256", brevoApiKey).update(email).digest("hex")
+        : "";
+      if (!expectedToken || !/^[a-f0-9]{64}$/i.test(token) || !safeEqual(token, expectedToken)) {
+        jsonResponse(response, 400, { error: "This unsubscribe link is invalid." });
+        return;
+      }
+      await mutateStore("campaigns.json", [], records => {
+        const broadcast = findBroadcast(records);
+        const contact = broadcast && broadcast.contacts.find(item => item.email === email);
+        if (contact) {
+          contact.emailConsentAt = null;
+          contact.emailUnsubscribedAt = new Date().toISOString();
+        }
+      });
+      response.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"
+      });
+      response.end("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Email preferences | A&amp;M Gadget</title><body style=\"font-family:Arial,sans-serif;max-width:520px;margin:12vh auto;padding:24px;color:#172033\"><h1>Unsubscribed</h1><p>You will no longer receive weekday marketing emails from A&amp;M Gadget at this address.</p></body></html>");
+      return;
+    }
+
     if (route === "GET /api/products") {
       jsonResponse(response, 200, await readStore("products.json", defaultProducts));
       return;
@@ -1501,6 +1763,186 @@ function createServer(options = {}) {
         address: user.address || "",
         hasAvatar: Boolean(user.avatarFile)
       })));
+      return;
+    }
+
+    if (route === "GET /api/admin/broadcast") {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to manage weekday messages." });
+        return;
+      }
+      jsonResponse(response, 200, await getBroadcastView());
+      return;
+    }
+
+    if (route === "POST /api/admin/broadcast/contacts") {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to manage broadcast contacts." });
+        return;
+      }
+      const body = await readRequestBody(request);
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const rawPhone = typeof body.phone === "string" ? body.phone.trim() : "";
+      const emailConsent = body.emailConsent === true;
+      const smsConsent = body.smsConsent === true;
+      if (name.length > 100) throw Object.assign(new Error("The contact name must be 100 characters or fewer."), { status: 400 });
+      if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+        throw Object.assign(new Error("Enter a valid contact email address."), { status: 400 });
+      }
+      if (Boolean(email) !== emailConsent) {
+        throw Object.assign(new Error("Enter an email address and confirm permission to send email, or leave both blank."), { status: 400 });
+      }
+      let phone = "";
+      if (rawPhone) {
+        phone = `+${normalizeSmsPhone(rawPhone)}`;
+      }
+      if (Boolean(phone) !== smsConsent) {
+        throw Object.assign(new Error("Enter a phone number and confirm permission to send SMS, or leave both blank."), { status: 400 });
+      }
+      if (!email && !phone) {
+        throw Object.assign(new Error("Add at least one opted-in email address or phone number."), { status: 400 });
+      }
+      const createdAt = new Date().toISOString();
+      const contact = await mutateStore("campaigns.json", [], records => {
+        let broadcast = findBroadcast(records);
+        if (!broadcast) {
+          broadcast = createDefaultBroadcast();
+          records.push(broadcast);
+        }
+        if (broadcast.contacts.length >= 500) {
+          throw Object.assign(new Error("The broadcast contact list can contain up to 500 contacts."), { status: 400 });
+        }
+        if (email && broadcast.contacts.some(item => item.email === email)) {
+          throw Object.assign(new Error("That email address is already in the broadcast contact list."), { status: 409 });
+        }
+        if (phone && broadcast.contacts.some(item => item.phone === phone)) {
+          throw Object.assign(new Error("That phone number is already in the broadcast contact list."), { status: 409 });
+        }
+        const created = {
+          id: crypto.randomUUID(),
+          name,
+          email,
+          phone,
+          emailConsentAt: emailConsent ? createdAt : null,
+          smsConsentAt: smsConsent ? createdAt : null,
+          createdAt
+        };
+        broadcast.contacts.push(created);
+        return created;
+      });
+      jsonResponse(response, 201, {
+        id: contact.id,
+        name: contact.name,
+        email: contact.email,
+        phone: contact.phone,
+        emailConsent: Boolean(contact.emailConsentAt),
+        smsConsent: Boolean(contact.smsConsentAt),
+        createdAt: contact.createdAt
+      });
+      return;
+    }
+
+    const broadcastContactRoute = route.match(/^DELETE \/api\/admin\/broadcast\/contacts\/([^/]+)$/);
+    if (broadcastContactRoute) {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to manage broadcast contacts." });
+        return;
+      }
+      let contactId;
+      try {
+        contactId = decodeURIComponent(broadcastContactRoute[1]);
+      } catch {
+        throw Object.assign(new Error("The contact ID is invalid."), { status: 400 });
+      }
+      const removed = await mutateStore("campaigns.json", [], records => {
+        const broadcast = findBroadcast(records);
+        if (!broadcast) return false;
+        const index = broadcast.contacts.findIndex(contact => contact.id === contactId);
+        if (index < 0) return false;
+        broadcast.contacts.splice(index, 1);
+        return true;
+      });
+      if (!removed) {
+        jsonResponse(response, 404, { error: "Broadcast contact not found." });
+        return;
+      }
+      jsonResponse(response, 200, { removed: true });
+      return;
+    }
+
+    if (route === "PUT /api/admin/broadcast/schedule") {
+      const session = getSession(request);
+      if (!session || session.user.role !== "admin") {
+        jsonResponse(response, 403, { error: "Sign in as the store admin to manage weekday messages." });
+        return;
+      }
+      const body = await readRequestBody(request);
+      if (typeof body.enabled !== "boolean" || typeof body.time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(body.time)) {
+        throw Object.assign(new Error("Choose whether the schedule is enabled and set a valid send time."), { status: 400 });
+      }
+      if (!body.messages || typeof body.messages !== "object" || Array.isArray(body.messages)) {
+        throw Object.assign(new Error("Add a message plan for each weekday."), { status: 400 });
+      }
+      const messages = {};
+      for (const day of broadcastWeekdays) {
+        const item = body.messages[day];
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          throw Object.assign(new Error(`Add a valid message plan for ${day}.`), { status: 400 });
+        }
+        const emailSubject = typeof item.emailSubject === "string" ? item.emailSubject.trim() : "";
+        const emailMessage = typeof item.emailMessage === "string" ? item.emailMessage.trim() : "";
+        const smsMessage = typeof item.smsMessage === "string" ? item.smsMessage.trim() : "";
+        if (emailSubject.length > 120 || emailMessage.length > 5000 || smsMessage.length > 280) {
+          throw Object.assign(new Error(`The ${day} message exceeds the allowed length.`), { status: 400 });
+        }
+        if (Boolean(emailSubject) !== Boolean(emailMessage)) {
+          throw Object.assign(new Error(`Add both an email subject and message for ${day}, or leave both empty.`), { status: 400 });
+        }
+        if (body.enabled && !emailMessage && !smsMessage) {
+          throw Object.assign(new Error(`Add an email or SMS message for ${day} before enabling the weekday schedule.`), { status: 400 });
+        }
+        messages[day] = { emailSubject, emailMessage, smsMessage };
+      }
+
+      const emailRequired = broadcastWeekdays.some(day => messages[day].emailMessage);
+      const smsRequired = broadcastWeekdays.some(day => messages[day].smsMessage);
+      const schedule = await mutateStore("campaigns.json", [], records => {
+        let broadcast = findBroadcast(records);
+        if (!broadcast) {
+          broadcast = createDefaultBroadcast();
+          records.push(broadcast);
+        }
+        if (body.enabled) {
+          if (emailRequired && !broadcast.contacts.some(contact => contact.email && contact.emailConsentAt)) {
+            throw Object.assign(new Error("Add at least one email contact who agreed to receive email updates."), { status: 400 });
+          }
+          if (smsRequired && !broadcast.contacts.some(contact => contact.phone && contact.smsConsentAt)) {
+            throw Object.assign(new Error("Add at least one phone contact who agreed to receive SMS updates."), { status: 400 });
+          }
+          if (emailRequired && !isBroadcastEmailConfigured()) {
+            throw Object.assign(new Error("Email delivery is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL on the API server."), { status: 503 });
+          }
+          if (smsRequired && !isBroadcastSmsConfigured()) {
+            throw Object.assign(new Error("SMS delivery is not configured. Set the Brevo SMS sender and OAuth credentials on the API server."), { status: 503 });
+          }
+        }
+        const wasEnabled = broadcast.schedule.enabled;
+        broadcast.schedule = {
+          enabled: body.enabled,
+          enabledAt: body.enabled
+            ? (wasEnabled && broadcast.schedule.enabledAt ? broadcast.schedule.enabledAt : new Date(broadcastNow()).toISOString())
+            : null,
+          time: body.time,
+          timeZone: "Africa/Lagos",
+          messages
+        };
+        return JSON.parse(JSON.stringify(broadcast.schedule));
+      });
+      jsonResponse(response, 200, { schedule });
       return;
     }
 
@@ -2433,6 +2875,7 @@ function createServer(options = {}) {
       }
     })(request, response, next);
   });
+  app.use(express.urlencoded({ extended: false, limit: "30000" }));
   const failedLoginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 10,
@@ -2484,7 +2927,19 @@ function createServer(options = {}) {
     }
     next(error);
   });
-  return http.createServer(app);
+  const server = http.createServer(app);
+  let broadcastSchedulerTimer = null;
+  server.on("listening", () => {
+    runDueBroadcast().catch(error => console.error("Could not run the weekday broadcast scheduler:", error.message));
+    broadcastSchedulerTimer = setInterval(() => {
+      runDueBroadcast().catch(error => console.error("Could not run the weekday broadcast scheduler:", error.message));
+    }, broadcastSchedulerIntervalMs);
+  });
+  server.on("close", () => {
+    if (broadcastSchedulerTimer) clearInterval(broadcastSchedulerTimer);
+  });
+  server.runDueBroadcast = runDueBroadcast;
+  return server;
 }
 
 if (require.main === module) {

@@ -1,4 +1,4 @@
-const allowedCollections = new Set(["products", "users", "orders", "sessions", "riders", "payout_requests", "support"]);
+const allowedCollections = new Set(["products", "users", "orders", "sessions", "riders", "payout_requests", "support", "campaigns"]);
 
 class SupabaseStore {
   constructor({ url, serviceRoleKey, fetchImpl = globalThis.fetch, avatarBucket = "profile-avatars" }) {
