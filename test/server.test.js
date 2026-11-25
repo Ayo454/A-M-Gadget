@@ -84,6 +84,8 @@ test("serves the store and keeps the data files private", async t => {
   assert.equal(home.status, 200);
   const homeHtml = await home.text();
   assert.match(homeHtml, /A&amp;M Gadget/);
+  assert.match(homeHtml, /rel="canonical" href="https:\/\/amgadget\.name\.ng\/"/);
+  assert.match(homeHtml, /property="og:url" content="https:\/\/amgadget\.name\.ng\/"/);
   assert.match(homeHtml, /site\.webmanifest/);
   assert.match(homeHtml, /data-install-app/);
   assert.match(homeHtml, /src="\/pwa\.js"/);
@@ -93,10 +95,12 @@ test("serves the store and keeps the data files private", async t => {
 
   const accountPage = await fetch(`${baseUrl}/account.html`);
   assert.equal(accountPage.status, 200);
+  assert.match(await accountPage.text(), /name="robots" content="noindex,nofollow"/);
   const riderPage = await fetch(`${baseUrl}/rider.app.html`);
   assert.equal(riderPage.status, 200);
   const riderPageHtml = await riderPage.text();
   assert.match(riderPageHtml, /Rider portal/);
+  assert.match(riderPageHtml, /name="robots" content="noindex,nofollow"/);
   assert.doesNotMatch(riderPageHtml, /href="(?:index|admin)(?:\.html|\/|#)/);
   assert.match(riderPageHtml, /mobile-web-app-capable/);
   assert.match(riderPageHtml, /data-app-loader/);
@@ -109,12 +113,15 @@ test("serves the store and keeps the data files private", async t => {
   assert.equal(shopAppRoute.status, 200);
   const shopAppHtml = await shopAppRoute.text();
   assert.match(shopAppHtml, /app.webmanifest/);
+  assert.match(shopAppHtml, /name="robots" content="noindex,nofollow"/);
   assert.match(shopAppHtml, /data-app-loader/);
   assert.match(shopAppHtml, /mobile-web-app-capable/);
   assert.match(shopAppHtml, /apple-mobile-web-app-capable/);
   const customerCarePage = await fetch(`${baseUrl}/customercare`);
   assert.equal(customerCarePage.status, 200);
-  assert.match(await customerCarePage.text(), /Customer care inbox/);
+  const customerCareHtml = await customerCarePage.text();
+  assert.match(customerCareHtml, /Customer care inbox/);
+  assert.match(customerCareHtml, /name="robots" content="noindex,nofollow"/);
   const oldCustomerCarePage = await fetch(`${baseUrl}/customer-care`, { redirect: "manual" });
   assert.equal(oldCustomerCarePage.status, 308);
   assert.equal(oldCustomerCarePage.headers.get("location"), "/customercare");
@@ -142,6 +149,7 @@ test("serves the store and keeps the data files private", async t => {
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
   const adminPageHtml = await adminPage.text();
+  assert.match(adminPageHtml, /name="robots" content="noindex,nofollow"/);
   assert.match(adminPageHtml, /rel="icon" href="\/app-icon\.svg"/);
   assert.match(adminPageHtml, /admin\.webmanifest/);
   assert.match(adminPageHtml, /data-app-loader/);
@@ -155,8 +163,17 @@ test("serves the store and keeps the data files private", async t => {
   assert.equal(oldAdminPage.headers.get("location"), "/admin");
   const allProductsPage = await fetch(`${baseUrl}/view%20all.html`);
   assert.equal(allProductsPage.status, 200);
+  const allProductsHtml = await allProductsPage.text();
+  assert.match(allProductsHtml, /rel="canonical" href="https:\/\/amgadget\.name\.ng\/view%20all\.html"/);
+  assert.match(allProductsHtml, /property="og:url" content="https:\/\/amgadget\.name\.ng\/view%20all\.html"/);
   const productDetailPage = await fetch(`${baseUrl}/product.html`);
   assert.equal(productDetailPage.status, 200);
+  const productDetailHtml = await productDetailPage.text();
+  assert.match(productDetailHtml, /rel="canonical" href="https:\/\/amgadget\.name\.ng\/product\.html"/);
+  assert.match(productDetailHtml, /property="og:url" content="https:\/\/amgadget\.name\.ng\/product\.html"/);
+  const productDetailScript = await fetch(`${baseUrl}/product-detail.js`);
+  assert.equal(productDetailScript.status, 200);
+  assert.match(await productDetailScript.text(), /canonicalUrl\.searchParams\.set\("id", product\.id\)/);
   const customerNavigation = await fetch(`${baseUrl}/customer-nav.js`);
   assert.equal(customerNavigation.status, 200);
   assert.doesNotMatch(await customerNavigation.text(), /admin\.html/);
@@ -166,6 +183,7 @@ test("serves the store and keeps the data files private", async t => {
   for (const page of ["profile.html", "account-info.html", "orders.html"]) {
     const response = await fetch(`${baseUrl}/${page}`);
     assert.equal(response.status, 200);
+    assert.match(await response.text(), /name="robots" content="noindex,nofollow"/);
   }
   const productResponse = await fetch(`${baseUrl}/api/products`);
   const products = await productResponse.json();

@@ -29,6 +29,18 @@ function renderProduct(product) {
   const availability = stock === null ? "Stock not specified" :
     stock === 0 ? "Out of stock" : `${stock} available`;
   document.title = `${product.name} | A&M Gadget`;
+  const canonicalUrl = new URL("/product.html", "https://amgadget.name.ng");
+  canonicalUrl.searchParams.set("id", product.id);
+  document.querySelector('link[rel="canonical"]').href = canonicalUrl.href;
+  document.querySelector('meta[name="description"]').content =
+    String(product.description || "Explore product details and shop online at A&M Gadget.").slice(0, 200);
+  document.querySelector('meta[property="og:title"]').content = document.title;
+  document.querySelector('meta[property="og:description"]').content =
+    String(product.description || "Explore product details and shop online at A&M Gadget.").slice(0, 200);
+  document.querySelector('meta[property="og:url"]').content = canonicalUrl.href;
+  document.querySelector('meta[name="twitter:title"]').content = document.title;
+  document.querySelector('meta[name="twitter:description"]').content =
+    String(product.description || "Explore product details and shop online at A&M Gadget.").slice(0, 200);
   detailStatus.textContent = "";
   detailRoot.innerHTML = `
     <article class="product-detail">
