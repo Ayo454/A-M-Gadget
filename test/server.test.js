@@ -142,6 +142,7 @@ test("serves the store and keeps the data files private", async t => {
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
   const adminPageHtml = await adminPage.text();
+  assert.match(adminPageHtml, /rel="icon" href="\/app-icon\.svg"/);
   assert.match(adminPageHtml, /admin\.webmanifest/);
   assert.match(adminPageHtml, /data-app-loader/);
   assert.match(adminPageHtml, /mobile-web-app-capable/);
