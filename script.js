@@ -494,9 +494,17 @@ document.addEventListener("keydown", event => {
 const filmDialog = document.querySelector("#filmDialog");
 const filmVideo = filmDialog.querySelector("video");
 const filmStatus = filmDialog.querySelector("[data-film-status]");
+const heroBackgroundVideo = document.querySelector(".hero-background-video");
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+if (prefersReducedMotion.matches) {
+  heroBackgroundVideo.pause();
+  heroBackgroundVideo.removeAttribute("autoplay");
+}
 
 document.querySelector(".play-button").addEventListener("click", () => {
   filmStatus.textContent = "";
+  heroBackgroundVideo.pause();
   filmDialog.showModal();
   filmVideo.play().catch(error => {
     console.error("Could not start the product film:", error);
@@ -512,6 +520,11 @@ filmDialog.addEventListener("close", () => {
   filmVideo.pause();
   filmVideo.currentTime = 0;
   filmStatus.textContent = "";
+  if (!prefersReducedMotion.matches) {
+    heroBackgroundVideo.play().catch(error => {
+      console.error("Could not resume the hero background video:", error);
+    });
+  }
 });
 
 productSearch.addEventListener("input", event => {
