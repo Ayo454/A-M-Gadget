@@ -155,6 +155,29 @@ button { cursor: pointer; }
   border: 1px solid #47474f; border-radius: 50%; font-size: 9px;
   padding-left: 2px;
 }
+.film-dialog {
+  width: min(900px, calc(100vw - 32px));
+  max-width: none;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #47474f;
+  border-radius: 12px;
+  color: #fff;
+  background: #111118;
+}
+.film-dialog::backdrop { background: rgba(0,0,0,.82); }
+.film-dialog-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 14px 18px;
+}
+.film-dialog-header h2 { margin: 0; font-size: 16px; }
+.film-dialog-close {
+  width: 36px; height: 36px; border: 1px solid #47474f; border-radius: 50%;
+  color: #fff; background: transparent; font-size: 24px; line-height: 1;
+}
+.film-dialog video { display: block; width: 100%; max-height: 78vh; background: #000; }
+.film-dialog-status { margin: 0; padding: 0 18px 12px; color: #d0d0d6; font-size: 13px; }
+.film-dialog-status:empty { display: none; }
 
 .hero-visual {
   position: relative; min-height: 610px;

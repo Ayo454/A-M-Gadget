@@ -89,9 +89,15 @@ test("serves the store and keeps the data files private", async t => {
   assert.match(homeHtml, /site\.webmanifest/);
   assert.match(homeHtml, /data-install-app/);
   assert.match(homeHtml, /src="\/pwa\.js"/);
+  assert.match(homeHtml, /src="\/videos\/product-film\.mp4"/);
+  assert.match(homeHtml, /id="filmDialog"/);
   assert.doesNotMatch(homeHtml, /Shop app|Customer care|Rider portal|Chat or call customer care/);
   assert.match(homeHtml, /class="cart-drawer" inert/);
   assert.doesNotMatch(homeHtml, /class="cart-drawer" aria-hidden=/);
+
+  const productFilm = await fetch(`${baseUrl}/videos/product-film.mp4`, { method: "HEAD" });
+  assert.equal(productFilm.status, 200);
+  assert.match(productFilm.headers.get("content-type"), /video\/mp4/);
 
   const accountPage = await fetch(`${baseUrl}/account.html`);
   assert.equal(accountPage.status, 200);

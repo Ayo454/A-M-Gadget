@@ -69,7 +69,7 @@
         <div class="hero-actions">
           <a class="button button-primary" href="#products">Explore collection <span>→</span></a>
           <button class="button button-primary site-install-button" type="button" data-install-app hidden>Install app</button>
-          <button class="play-button" aria-label="Watch product film">
+          <button class="play-button" type="button" aria-label="Watch product film">
             <span class="play-icon">▶</span>
             <span>Watch film</span>
           </button>
@@ -169,6 +169,18 @@
       </div>
     </section>
   </main>
+
+  <dialog class="film-dialog" id="filmDialog" aria-labelledby="filmDialogTitle">
+    <div class="film-dialog-header">
+      <h2 id="filmDialogTitle">A&amp;M Gadget product film</h2>
+      <button class="film-dialog-close" type="button" aria-label="Close video">&times;</button>
+    </div>
+    <video controls playsinline preload="metadata">
+      <source src="/videos/product-film.mp4" type="video/mp4">
+      Your browser does not support video playback.
+    </video>
+    <p class="film-dialog-status" data-film-status role="status" aria-live="polite"></p>
+  </dialog>
 
   <footer>
     <a class="brand" href="#"><span class="brand-mark">A&amp;M</span><span>A&amp;M Gadget</span></a>

@@ -490,6 +490,30 @@ document.addEventListener("keydown", event => {
     else setCart(false);
   }
 });
+
+const filmDialog = document.querySelector("#filmDialog");
+const filmVideo = filmDialog.querySelector("video");
+const filmStatus = filmDialog.querySelector("[data-film-status]");
+
+document.querySelector(".play-button").addEventListener("click", () => {
+  filmStatus.textContent = "";
+  filmDialog.showModal();
+  filmVideo.play().catch(error => {
+    console.error("Could not start the product film:", error);
+    filmStatus.textContent = "The video could not start. Press Play to try again.";
+  });
+});
+
+filmDialog.querySelector(".film-dialog-close").addEventListener("click", () => filmDialog.close());
+filmDialog.addEventListener("click", event => {
+  if (event.target === filmDialog) filmDialog.close();
+});
+filmDialog.addEventListener("close", () => {
+  filmVideo.pause();
+  filmVideo.currentTime = 0;
+  filmStatus.textContent = "";
+});
+
 productSearch.addEventListener("input", event => {
   const term = event.target.value.trim().toLowerCase();
   let matches = 0;
