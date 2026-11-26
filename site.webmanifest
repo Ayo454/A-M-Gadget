@@ -1,9 +1,9 @@
 {
-  "id": "/",
+  "id": "/app",
   "name": "A&M Gadget Store",
   "short_name": "A&M Gadget",
   "description": "Shop gadgets and manage your A&M Gadget orders.",
-  "start_url": "/",
+  "start_url": "/app",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0b0b0f",

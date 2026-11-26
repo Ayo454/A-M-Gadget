@@ -132,7 +132,10 @@ test("serves the store and keeps the data files private", async t => {
     const manifest = await manifestResponse.json();
     assert.equal(typeof manifest.start_url, "string");
     assert.equal(manifest.display, "standalone");
-    if (manifestPath === "/site.webmanifest") assert.equal(manifest.start_url, "/");
+    if (manifestPath === "/site.webmanifest" || manifestPath === "/app.webmanifest") {
+      assert.equal(manifest.id, "/app");
+      assert.equal(manifest.start_url, "/app");
+    }
     if (manifestPath === "/customer-care.webmanifest") assert.equal(manifest.start_url, "/customercare");
     if (manifestPath === "/admin.webmanifest") assert.equal(manifest.start_url, "/admin");
   }
